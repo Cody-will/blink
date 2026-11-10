@@ -1,0 +1,11 @@
+name = "Blink"
+theme = "Some kind of theme"
+
+[palette]
+bg = "#bg"
+fg = "#fg"
+border = "#border"
+accent = "#accent"
+accent_alt = "#accent_alt"
+
+border = true
