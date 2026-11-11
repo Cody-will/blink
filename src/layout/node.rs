@@ -1,3 +1,5 @@
+use crate::layout::rect::Rect;
+
 #[derive(Debug, Clone)]
 pub enum LayoutNode {
     Row {
@@ -23,3 +25,8 @@ pub enum LayoutNode {
 }
 
 
+#[derive(Debug, Clone, Copy)]
+pub struct RenderNode<'a> {
+    pub node: &'a LayoutNode,
+    pub area: Rect,
+}
