@@ -56,7 +56,7 @@ pub trait Component {
         Size {
             width: output 
                 .lines() 
-                .map(|line| line.chars().count())
+                .map(unicode_width::UnicodeWidthStr::width)
                 .max()
                 .unwrap_or(0) as u16,
             height: output.lines().count() as u16,

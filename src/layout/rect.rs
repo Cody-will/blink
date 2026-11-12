@@ -1,4 +1,4 @@
-
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Rect {
     pub x: u16,
@@ -7,7 +7,7 @@ pub struct Rect {
     pub height: u16,
 }
 
-   
+#[allow(dead_code)] 
 impl Rect {
     pub fn new(x: u16, y: u16, width: u16, height: u16) -> Self {
         Self { x, y, width, height }
