@@ -1,3 +1,5 @@
+use crate::styles::ContainerStyleConfig;
+
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Rect {
@@ -51,6 +53,23 @@ impl Rect {
         };
 
         (top, bottom)
+    }
+
+    pub fn inner(&self, container: &ContainerStyleConfig) -> Self {
+        let border = container.border.inset();
+        let padding = container.padding;
+
+        let left = border.saturating_add(padding.left);
+        let right = border.saturating_add(padding.right);
+        let top = border.saturating_add(padding.top);
+        let bottom = border.saturating_add(padding.bottom);
+
+        Self {
+            x: self.x.saturating_add(left),
+            y: self.y.saturating_add(top),
+            width: self.width.saturating_add(left.saturating_add(right)),
+            height: self.height.saturating_add(top.saturating_add(bottom)),
+        }
     }
 }
 

@@ -219,20 +219,7 @@ pub struct WindowStyle {
 
 impl WindowStyle {
     pub fn new(cfg: &Config, terminal: &Terminal) -> Self {
-        let config = WindowStyleConfig {
-            container: ContainerStyleConfig {
-                border: BorderConfig {
-                    kind: if cfg.border {
-                        BorderType::Rounded
-                    } else {
-                        BorderType::None
-                    },
-                    color: cfg.palette.border.clone(),
-                },
-                padding: Padding::default(),
-                background: Some(cfg.palette.bg.clone()),
-            },
-        };
+        let config = cfg.window.clone();
 
         let style = config
             .container
@@ -424,45 +411,24 @@ pub struct LayoutStyle {
 
 impl LayoutStyle {
     pub fn new(cfg: &Config, terminal: &Terminal) -> Self {
-        let window = WindowStyle::new(cfg, terminal);
-
-        let section_config = SectionStyleConfig::default();
-
-        let first_section = SectionStyle::new(
-            section_config.clone()
-        );
-
-        let second_section = SectionStyle::new(
-            section_config
-        );
-
-        let module = ModuleStyle::new(
-            ModuleStyleConfig {
-                container: ContainerStyleConfig {
-                    border: BorderConfig {
-                        color: cfg.palette.border.clone(),
-                        ..BorderConfig::default()
-                    },
-                    ..ModuleStyleConfig::default().container
-                },
-                title: TextStyleConfig {
-                    foreground: cfg.palette.accent.clone(),
-                    bold: true,
-                    ..TextStyleConfig::default()
-                },
-                ..ModuleStyleConfig::default()
-            }
-        );
-
-        let component = ComponentStyle::new(cfg);
-
         Self {
-            window,
-            first_section,
-            second_section,
-            module,
-            component,
+            window: WindowStyle::new(cfg, terminal),
+
+            first_section: SectionStyle::new(
+                cfg.first_section.clone(),
+            ),
+
+            second_section: SectionStyle::new(
+                cfg.second_section.clone(),
+            ),
+
+            module: ModuleStyle::new(
+                cfg.module.clone(),
+            ),
+
+            component: ComponentStyle::from_config(
+                &cfg.component,
+            ),
         }
     }
 }
-

@@ -1,6 +1,9 @@
 use crate::layout::rect::Rect;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone)]
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum LayoutNode {
     Row {
         gap: u16,
