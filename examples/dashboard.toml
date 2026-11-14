@@ -1,0 +1,29 @@
+name = "Blink · Dashboard"
+theme = "tokyo-night"
+[layout]
+direction = "horizontal"
+gap = 2
+[layout.first]
+type = "column"
+size = { percent = 30 }
+gap = 1
+children = [
+    { type = "image", image = { fit = "contain" } },
+    { type = "swatches", size = "auto" },
+]
+[layout.second]
+type = "column"
+gap = 1
+children = [
+    { type = "row", children = [
+        { type = "module", preset = "system", title_align = "start" },
+        { type = "module", preset = "hardware" },
+    ] },
+    { type = "row", children = [
+        { type = "module", preset = "storage" },
+        { type = "module", preset = "session", title_align = "end" },
+    ] },
+]
+[styles.module.border]
+kind = "double"
+color = "@accent_alt"

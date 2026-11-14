@@ -1,11 +1,23 @@
-name = "Blink"
-theme = "Some kind of theme"
+background = "transparent"
+theme = "gruvbox-material"
 
-[palette]
-bg = "#bg"
-fg = "#fg"
-border = "#border"
-accent = "#accent"
-accent_alt = "#accent_alt"
+[layout]
+direction = "horizontal"
+gap = 1
 
-border = true
+[layout.first]
+image = "builtin"
+size = "35%"
+
+[layout.second]
+direction = "vertical"
+size = "fill"
+swatches = true
+
+[[layout.second.modules]]
+components = ["os", "hostname", "kernel", "uptime", "shell"]
+title = "System"
+
+[[layout.second.modules]]
+components = ["cpu", "cpu_cores", "memory"]
+title = "Hardware"

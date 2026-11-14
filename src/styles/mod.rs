@@ -1,10 +1,6 @@
-use rusty_lipgloss::{Border, Style};
+use crate::config::theme::Palette;
+use rusty_lipgloss::{Border, Position, Style};
 use serde::{Deserialize, Serialize};
-
-use crate::{
-    config::theme::Config,
-    terminal::Terminal,
-};
 
 // --------------------------------------------------
 // BORDER
@@ -23,28 +19,13 @@ pub enum BorderType {
 }
 
 impl BorderType {
-    pub fn to_border(self) -> Option<Border> {
-        match self {
-            Self::None => None,
-            Self::Normal => Some(Border::normal()),
-            Self::Rounded => Some(Border::rounded()),
-            Self::Thick => Some(Border::thick()),
-            Self::Double => Some(Border::double()),
-            Self::Hidden => Some(Border::hidden()),
-        }
-    }
-
-    pub fn is_visible(self) -> bool {
-        !matches!(self, Self::None | Self::Hidden)
-    }
-
     pub fn occupies_space(self) -> bool {
         !matches!(self, Self::None)
     }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct BorderConfig {
     pub kind: BorderType,
     pub color: String,
@@ -54,28 +35,14 @@ impl Default for BorderConfig {
     fn default() -> Self {
         Self {
             kind: BorderType::Rounded,
-            color: "#a89984".into(),
+            color: "@border".into(),
         }
     }
 }
 
 impl BorderConfig {
-    pub fn apply(&self, style: Style) -> Style {
-        match self.kind.to_border() {
-            Some(border) => style
-                .border(border, &[true])
-                .border_foreground(&[&self.color]),
-
-            None => style,
-        }
-    }
-
     pub fn inset(&self) -> u16 {
-        if self.kind.occupies_space() {
-            1
-        } else {
-            0
-        }
+        if self.kind.occupies_space() { 1 } else { 0 }
     }
 }
 
@@ -84,7 +51,7 @@ impl BorderConfig {
 // --------------------------------------------------
 
 #[derive(Debug, Clone, Copy, Default, Deserialize, Serialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct Padding {
     pub top: u16,
     pub bottom: u16,
@@ -102,15 +69,6 @@ impl Padding {
         }
     }
 
-    pub fn x_y(x: u16, y: u16) -> Self {
-        Self {
-            top: y,
-            bottom: y,
-            left: x,
-            right: x,
-        }
-    }
-
     pub fn horizontal(&self) -> u16 {
         self.left.saturating_add(self.right)
     }
@@ -125,7 +83,7 @@ impl Padding {
 // --------------------------------------------------
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct TextStyleConfig {
     pub foreground: String,
     pub background: Option<String>,
@@ -137,7 +95,7 @@ pub struct TextStyleConfig {
 impl Default for TextStyleConfig {
     fn default() -> Self {
         Self {
-            foreground: "#ddc7a1".into(),
+            foreground: "@fg".into(),
             background: None,
             bold: false,
             italic: false,
@@ -154,10 +112,20 @@ impl TextStyleConfig {
             .italic(self.italic)
             .underline(self.underline);
 
-        if let Some(background) = &self.background {
+        if let Some(background) = effective_background(self.background.as_deref(), None) {
             style = style.background(background);
         }
 
+        style
+    }
+
+    pub fn resolve_with_background(&self, parent: Option<&str>) -> Style {
+        let mut style = self.build_style();
+        if self.background.is_none()
+            && let Some(bg) = parent
+        {
+            style = style.background(bg);
+        }
         style
     }
 }
@@ -168,25 +136,16 @@ impl TextStyleConfig {
 // --------------------------------------------------
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct ContainerStyleConfig {
     pub border: BorderConfig,
     pub padding: Padding,
     pub background: Option<String>,
+    pub align_h: Alignment,
+    pub align_v: Alignment,
 }
 
-
 impl ContainerStyleConfig {
-    pub fn resolve(&self) -> Style {
-        let mut style = Style::new();
-
-        if let Some(background) = &self.background {
-            style = style.background(background);
-        }
-
-        self.border.apply(style)
-    }
-
     pub fn horizontal_inset(&self) -> u16 {
         self.padding
             .horizontal()
@@ -200,235 +159,109 @@ impl ContainerStyleConfig {
     }
 }
 
-// --------------------------------------------------
-// WINDOW
-// --------------------------------------------------
-
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-#[serde(default)]
-pub struct WindowStyleConfig {
-    pub container: ContainerStyleConfig,
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum Alignment {
+    #[default]
+    #[serde(alias = "left", alias = "top")]
+    Start,
+    Center,
+    #[serde(alias = "right", alias = "bottom")]
+    End,
 }
-
-
-#[derive(Debug, Clone)]
-pub struct WindowStyle {
-    pub style: Style,
-    pub config: WindowStyleConfig,
-}
-
-impl WindowStyle {
-    pub fn new(cfg: &Config, terminal: &Terminal) -> Self {
-        let config = cfg.window.clone();
-
-        let style = config
-            .container
-            .resolve()
-            .width(terminal.width.into())
-            .height(terminal.height.into());
-
-        Self { style, config }
+impl Alignment {
+    pub fn position(self) -> Position {
+        match self {
+            Self::Start => Position::LEFT,
+            Self::Center => Position::CENTER,
+            Self::End => Position::RIGHT,
+        }
     }
-}
-
-// --------------------------------------------------
-// LAYOUT SECTIONS
-// Left / Right or Top / Bottom
-// --------------------------------------------------
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(default)]
-pub struct SectionStyleConfig {
-    pub container: ContainerStyleConfig,
-}
-
-impl Default for SectionStyleConfig {
-    fn default() -> Self {
-        Self {
-            container: ContainerStyleConfig {
-                border: BorderConfig {
-                    kind: BorderType::None,
-                    ..BorderConfig::default()
-                },
-                padding: Padding::default(),
-                background: None,
-            },
+    pub fn offset(self, available: u16, used: u16) -> u16 {
+        let spare = available.saturating_sub(used);
+        match self {
+            Self::Start => 0,
+            Self::Center => spare / 2,
+            Self::End => spare,
         }
     }
 }
-
-#[derive(Debug, Clone)]
-pub struct SectionStyle {
-    pub style: Style,
-    pub config: SectionStyleConfig,
+pub trait StyleBuilder {
+    fn build_style(&self) -> Style;
 }
 
-impl SectionStyle {
-    pub fn new(config: SectionStyleConfig) -> Self {
-        let style = config.container.resolve();
-
-        Self { style, config }
+/// Omitted backgrounds inherit; explicit transparency restores the terminal default.
+pub fn effective_background<'a>(own: Option<&'a str>, parent: Option<&'a str>) -> Option<&'a str> {
+    match own {
+        Some("transparent") => None,
+        Some(color) => Some(color),
+        None => parent,
     }
 }
 
-// --------------------------------------------------
-// MODULE
-// A container holding multiple components
-// --------------------------------------------------
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(default)]
-pub struct ModuleStyleConfig {
-    pub container: ContainerStyleConfig,
-    pub title: TextStyleConfig,
-    pub gap: u16,
+fn resolve_background(value: Option<&str>, palette: &Palette) -> anyhow::Result<Option<String>> {
+    value
+        .map(|value| {
+            if value == "transparent" {
+                Ok(value.to_owned())
+            } else {
+                palette.color(value)
+            }
+        })
+        .transpose()
 }
-
-impl Default for ModuleStyleConfig {
-    fn default() -> Self {
+impl StyleBuilder for TextStyleConfig {
+    fn build_style(&self) -> Style {
+        self.resolve()
+    }
+}
+impl TextStyleConfig {
+    pub fn colors(&self, palette: &Palette) -> anyhow::Result<Self> {
+        let mut s = self.clone();
+        s.foreground = palette.color(&s.foreground)?;
+        s.background = resolve_background(s.background.as_deref(), palette)?;
+        Ok(s)
+    }
+}
+impl ContainerStyleConfig {
+    pub fn plain() -> Self {
         Self {
-            container: ContainerStyleConfig {
-                border: BorderConfig::default(),
-                padding: Padding::all(1),
-                background: None,
+            border: BorderConfig {
+                kind: BorderType::None,
+                ..Default::default()
             },
-            title: TextStyleConfig {
-                bold: true,
-                ..TextStyleConfig::default()
-            },
-            gap: 0,
+            ..Default::default()
         }
     }
-}
-
-#[derive(Debug, Clone)]
-pub struct ModuleStyle {
-    pub container: Style,
-    pub title: Style,
-    pub padding: Padding,
-    pub gap: u16,
-    pub config: ModuleStyleConfig,
-}
-
-impl ModuleStyle {
-    pub fn new(config: ModuleStyleConfig) -> Self {
-        let container = config.container.resolve();
-        let title = config.title.resolve();
-        let padding = config.container.padding;
-        let gap = config.gap;
-
-        Self {
-            container,
-            title,
-            padding,
-            gap,
-            config,
-        }
+    pub fn colors(&self, palette: &Palette) -> anyhow::Result<Self> {
+        let mut s = self.clone();
+        s.border.color = palette.color(&s.border.color)?;
+        s.background = resolve_background(s.background.as_deref(), palette)?;
+        Ok(s)
     }
-}
-
-// --------------------------------------------------
-// COMPONENT
-// Individual information row
-// Example: CPU: AMD Ryzen 5
-// --------------------------------------------------
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(default)]
-pub struct ComponentStyleConfig {
-    pub icon: TextStyleConfig,
-    pub label: TextStyleConfig,
-    pub content: TextStyleConfig,
-    pub padding: Padding,
-}
-
-impl Default for ComponentStyleConfig {
-    fn default() -> Self {
-        Self {
-            icon: TextStyleConfig::default(),
-            label: TextStyleConfig {
-                bold: true,
-                ..TextStyleConfig::default()
-            },
-            content: TextStyleConfig::default(),
-            padding: Padding::default(),
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct ComponentStyle {
-    pub icon: Style,
-    pub label: Style,
-    pub content: Style,
-    pub padding: Padding,
-}
-
-impl ComponentStyle {
-    pub fn new(cfg: &Config) -> Self {
-        let config = ComponentStyleConfig {
-            icon: TextStyleConfig {
-                foreground: cfg.palette.accent.clone(),
-                ..TextStyleConfig::default()
-            },
-            label: TextStyleConfig {
-                foreground: cfg.palette.accent_alt.clone(),
-                bold: true,
-                ..TextStyleConfig::default()
-            },
-            content: TextStyleConfig {
-                foreground: cfg.palette.fg.clone(),
-                ..TextStyleConfig::default()
-            },
-            ..ComponentStyleConfig::default()
+    pub fn decoration(&self, width: u16, height: u16) -> String {
+        let border = match self.border.kind {
+            BorderType::None => None,
+            BorderType::Hidden => Some(Border::hidden()),
+            BorderType::Normal => Some(Border::normal()),
+            BorderType::Rounded => Some(Border::rounded()),
+            BorderType::Thick => Some(Border::thick()),
+            BorderType::Double => Some(Border::double()),
         };
-
-        Self::from_config(&config)
-    }
-
-    pub fn from_config(config: &ComponentStyleConfig) -> Self {
-        Self {
-            icon: config.icon.resolve(),
-            label: config.label.resolve(),
-            content: config.content.resolve(),
-            padding: config.padding,
+        // This Lip Gloss release includes borders in width and height.
+        let mut style = Style::new()
+            .width(usize::from(width))
+            .height(usize::from(height))
+            .max_width(usize::from(width))
+            .max_height(usize::from(height));
+        if let Some(b) = border {
+            style = style
+                .border(b, &[true])
+                .border_foreground(&[&self.border.color]);
         }
-    }
-}
-
-// --------------------------------------------------
-// COMBINED LAYOUT STYLES
-// --------------------------------------------------
-
-#[derive(Debug, Clone)]
-pub struct LayoutStyle {
-    pub window: WindowStyle,
-    pub first_section: SectionStyle,
-    pub second_section: SectionStyle,
-    pub module: ModuleStyle,
-    pub component: ComponentStyle,
-}
-
-impl LayoutStyle {
-    pub fn new(cfg: &Config, terminal: &Terminal) -> Self {
-        Self {
-            window: WindowStyle::new(cfg, terminal),
-
-            first_section: SectionStyle::new(
-                cfg.first_section.clone(),
-            ),
-
-            second_section: SectionStyle::new(
-                cfg.second_section.clone(),
-            ),
-
-            module: ModuleStyle::new(
-                cfg.module.clone(),
-            ),
-
-            component: ComponentStyle::from_config(
-                &cfg.component,
-            ),
+        if let Some(bg) = effective_background(self.background.as_deref(), None) {
+            style = style.background(bg);
         }
+        style.render("")
     }
 }

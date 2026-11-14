@@ -1,0 +1,19 @@
+# A custom, text-only section with no module border.
+[icons]
+mode = "ascii"
+
+[styles.window.padding]
+top = 0
+bottom = 0
+left = 0
+right = 0
+
+[styles.module.border]
+kind = "none"
+
+[layout.first]
+title = "System"
+components = ["os", "cpu", { name = "memory", label = "RAM" }]
+
+[layout.second]
+modules = []

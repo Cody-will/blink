@@ -1,0 +1,17 @@
+theme = "monochrome"
+
+[icons]
+enabled = false
+
+[styles.window.border]
+kind = "none"
+
+[styles.module.border]
+kind = "none"
+
+[layout.first]
+title = "System"
+components = ["os", "kernel", "shell"]
+
+[layout.second]
+modules = []

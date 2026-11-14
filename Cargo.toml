@@ -9,10 +9,19 @@ base64 = "0.23.1"
 clap = { version = "4.6.7", features = ["derive"] }
 crossterm = "0.29.0"
 dirs = "7.0.0"
-image = "0.25.10"
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp", "gif"] }
+rusty-x-ansi = "0.11.7"
 rusty-lipgloss = "2.0.5"
 serde = { version = "1.0.229", features = ["derive"] }
 sysinfo = "0.40.1"
-thiserror = "2.0.21"
+battery = "0.7.8"
+chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
+display-info = "0.5.9"
+icy_sixel = "0.7.0"
 toml = "1.2.1"
+unicode-segmentation = "1.13.3"
 unicode-width = "0.2.3"
+
+[target.'cfg(unix)'.dependencies]
+signal-hook = "0.3.18"
+rustix = { version = "1.1.6", features = ["fs", "termios"] }

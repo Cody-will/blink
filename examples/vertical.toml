@@ -1,0 +1,14 @@
+theme = "catppuccin-mocha"
+
+[layout]
+direction = "vertical"
+
+[layout.first]
+image = "builtin"
+size = "35%"
+
+[layout.second]
+direction = "horizontal"
+align_v = "center"
+gap = 1
+modules = ["system", "hardware"]
