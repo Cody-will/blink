@@ -1,4 +1,5 @@
 pub mod assets;
+pub mod catalog;
 use crate::{
     config::Backend,
     layout::{
@@ -278,3 +279,6 @@ pub fn ansi(p: &Prepared, background: [u8; 3]) -> String {
     }
     result
 }
+
+#[cfg(test)]
+mod artwork_tests;

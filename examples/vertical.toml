@@ -4,7 +4,7 @@ theme = "catppuccin-mocha"
 direction = "vertical"
 
 [layout.first]
-image = "builtin"
+image = "auto"
 size = "35%"
 
 [layout.second]

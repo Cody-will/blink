@@ -2,108 +2,146 @@
 
 ## Architecture
 
-The existing recursive layout and saturating rectangle geometry remain the core.
-Configuration describes content; it does not perform collection or terminal I/O.
-The normal config file is a compact user-facing document, not a serialized render
-tree. Image/module/component shortcuts normalize into the existing recursive model.
-First launch and `--print-config` emit concise TOML; the exporter verifies a lossless
-read-back and preserves advanced/custom settings. A default export is 23 lines.
-Backgrounds are transparent by default; explicit colors in existing files remain
-explicit. The old detailed schema remains supported.
+The existing recursive layout engine, rectangle geometry, Lip Gloss styling,
+image encoders, and embedded artwork remain in use. Configuration is separate
+from system collection and terminal I/O. The generated default is 34 lines,
+with transparent backgrounds, OS-selected artwork, and four editable module lists. Detailed recursive
+layouts and existing files remain supported; no automatic on-disk migration occurs.
 
-1. `config` loads/normalizes TOML, expands presets, validates styles, and converts
-   recognizable legacy settings without writing over source files.
+1. `config` loads and normalizes TOML, expands presets/aliases, validates settings,
+   and converts recognizable legacy layouts. Concise export verifies a lossless
+   read-back before returning its document.
 2. `terminal` captures dimensions/cell pixels and bounded graphics capabilities.
-3. `components::system` collects requested measurements into a typed snapshot;
-   the component registry supplies labels, icon mappings, and module presets.
-4. `content` resolves styles, assets, visibility, text, and aligned value columns.
-5. `measurement` determines natural sizes in display cells; `layout::engine`
-   allocates recursive rectangles and retains container boundaries.
-6. `styles` converts configuration into Lip Gloss styles. `render` composes bounded
-   Lip Gloss blocks on its canvas, then positions native images and restores the
-   prompt cursor. Plain output uses the same resolved text without screen geometry.
+3. `components::system` collects requested measurements into one typed snapshot.
+   `components::native` reads package databases, host hardware, interfaces, adapter
+   state, locale, and appearance settings. The registry owns labels, icons, module
+   lists, aliases, presentation kinds, and trimming priorities.
+4. `content` resolves availability, assets, styles, presentation rows, and aligned
+   component columns. `measurement` computes natural display-cell dimensions.
+5. `responsive` packs only opted-in column sections into one to three lanes, with
+   header/footer groups spanning the section. It operates on resolved content,
+   without changing the source configuration or recollecting data. If height is
+   insufficient, optional artwork and then lower-priority rows are omitted.
+6. `layout::engine` allocates bounded recursive rectangles and retains styled
+   containers. `styles` builds Lip Gloss styles; `render` composes them on its
+   canvas, positions native images, and restores the prompt cursor. Plain output
+   skips responsive trimming and dashboard geometry.
 7. `graphics` handles fitting, alpha compositing, asset reuse, and protocol encoding.
+   Its catalog embeds 30 images under stable names, preserving the original files
+   and bare-filename aliases. Automatic selection matches the native OS/distribution
+   once per invocation, always variant 1, with `blink-1` as the unknown-system fallback.
+   ASCII file/inline sources resolve to styled text and preserve art whitespace.
 
-Major additions are the content/measurement modules, compatibility converter,
-asset loader, component registry, terminal capability handling, CLI integration
-tests, and example configurations. Existing Kitty chunking, size variants,
-rectangles, configuration defaults, and the bundled image were retained/refined.
+The registry covers every entry in the Fastfetch 2.71 default structure, with a
+checked fixture preventing accidental omissions. This does not claim every optional
+Fastfetch module or equivalent platform detection. [Component coverage](components.md)
+lists sources and limitations. Native detection never invokes external commands.
 
-The broad generic builder abstraction was intentionally avoided: `StyleBuilder`
-is used for text styles, and containers expose bounded decoration construction.
-Rendering uses Lip Gloss's own canvas and alignment instead of implementing a
-second ANSI cell parser or maintaining hardcoded border glyphs.
+Main additions for this expansion: `src/components/native/{mod,packages,appearance,tests}.rs`,
+`src/responsive.rs`, the default-list fixture, expanded registry/config/content
+handling, responsive/native tests, and the compact default example. The generic
+layout engine and graphics implementations did not require a replacement.
 
 ## Behavior and limits
 
-The dashboard uses the full terminal area minus configured prompt rows, with a
-minimum of one reserved row. The default is two. Tiny/custom layouts clip; only
-explicitly optional nodes disappear. The default excludes CPU usage to avoid its
-sampling delay. Availability failures produce `N/A` or hidden rows, not invented
-measurements. Normal missing-image failures are optional; config checks report them.
+The dashboard uses the terminal area minus configured prompt rows, reserving at
+least one. The default reserves two. Small responsive sections drop lower-priority
+rows while retaining OS, CPU, and memory longest; extremely small terminals clip
+safely. Explicit custom module/children layouts retain their fixed arrangement
+unless `responsive = true` is configured. Plain output keeps all available requested
+metrics. Missing values are hidden by default; `unavailable = "show"` displays `N/A`.
+CPU usage is opt-in because it requires an additional sampling interval.
 
-Themes use palette references so changing a theme changes all default style roles.
-Literal colors in older or customized configurations intentionally remain literal.
-Original settings with ambiguous mappings fail explicitly and require user edits;
-there is no automatic on-disk migration or config overwrite.
+New Linux package sources cover pacman, dpkg, RPM SQLite, Flatpak, and Snap. GNOME
+uses GSettings directly; GTK/KDE/Xfce/Openbox and supported terminal fonts use
+native settings/configuration. Dynamic terminal overrides and unsupported sources
+remain unavailable. Adapter wattage describes measured draw, not rated capacity.
+Linux is the runtime-tested OS; macOS/Windows builds and native detection need
+external validation. Existing portable metrics retain their native libraries.
 
-Native graphics implementations cover Kitty, iTerm2 inline PNG, and Sixel via
-icy_sixel, with ANSI and text fallbacks. Real terminal windows were unavailable
-for visual certification. Sixel colors are quantized; ANSI/Sixel transparency is
-flattened onto the configured background. SVG and animation beyond a GIF's first
-frame are out of scope. Tmux passthrough is opt-in and split-pane positioning is
-unverified; GNU screen passthrough is unsupported.
+Themes use palette references; explicit user colors remain explicit. Ambiguous
+legacy mappings fail with actionable errors. Existing files are never rewritten,
+including older compact configurations, so adopting the expanded defaults requires
+choosing the new example or editing/exporting a new configuration file.
 
-Linux is the only runtime-tested OS. macOS/Windows rely on native portable
-libraries with unavailable metrics handled gracefully; their builds and runtimes
-still need external validation. Desktop, shell, terminal, GPU, battery, and display
-availability varies by session and OS. The collector never invokes external commands.
+Kitty, iTerm2, and Sixel encoders retain automated protocol coverage, with ANSI/text
+fallbacks. Native emulator windows were unavailable for visual certification.
+Sixel colors are quantized; ANSI/Sixel flatten transparency onto the resolved
+background. SVG, animated playback, GNU screen passthrough, and certified tmux
+split-pane image positioning remain outside current support.
 
 ## Validation
 
-Automated tests cover defaults/serialization, nested overrides, themes/colors,
-legacy conversion, metric formatting and unavailability, Unicode column alignment,
-icons, border/padding geometry, allocation/overflow, raster fitting/alpha,
-asset reuse, Kitty chunks, iTerm2 PNG decoding, Sixel decoding, capability parsing,
-CLI parsing, redirected output, config preservation, examples, and broken pipes.
-
-Pseudo-terminal checks exercise both orientations at 80×24, 32×12, 3×4, and 1×1;
-each explicit image backend; successful simulated Kitty capability replies and
-probe timeout fallback; no-color output; missing image fallback; prompt placement;
-and restoration of the original termios attributes. These validate emitted bytes
-and terminal state, not the visual behavior of a native emulator.
-
-The following checks passed on Linux:
+The following passed on Linux after this expansion:
 
 - `cargo fmt --check`
-- `cargo clippy --all-targets -- -D warnings`
-- `cargo test` (55 unit tests and 9 CLI integration tests)
-- `cargo build --release`
-- `cargo install --offline --path . --locked --root /tmp/blink-installed-verification`
-- Installed binary executed from `/tmp`, including embedded artwork and asset checks.
-- `cargo package --list --allow-dirty --offline` includes the bundled image, examples,
-  documentation, source, and tests. No publishing was performed.
+- `cargo clippy --offline --all-targets -- -D warnings`
+- `cargo test --offline`: 85 unit tests and 13 CLI integration tests
+- `cargo build --offline --release`
+- `cargo install --offline --path . --locked --root /tmp/blink-artwork-installed`
+- Installed binary run from `/tmp`, including all 30 bundled selections, plain output,
+  ASCII art, and embedded-asset validation.
 
-Release measurements on this Linux machine, warm filesystem caches, ten subprocess
-runs per scenario (including process startup and output consumption):
+Tests cover the complete default-list mapping, aliases and defaults, compact and
+legacy config preservation, missing/empty/malformed/unreadable native sources,
+read-only RPM SQLite, package counting policies, active desktop settings, terminal
+font includes, adapter units/state, IP filtering, zero swap, presentation display
+widths and colors, responsive packing/priorities, both orientations, nested layout
+bounds, custom layout stability, aligned multiline values, and complete plain output.
+Artwork tests cover all 30 decodes and aliases, exact OS mapping/fallback, custom-file
+precedence, lossless config export, ASCII styling/whitespace/tabs/Unicode, invalid
+UTF-8 and bounded reads, optional removal, plain output, and catalog CLI inspection.
+Rename SHA-256 verification confirms the original image bytes are unchanged.
+Existing theme, image/protocol, capability, geometry, CLI, and broken-pipe tests pass.
+
+Release pseudo-terminal checks covered horizontal and vertical layouts at 80×24,
+120×40, 160×60, 32×12, 3×4, and 1×1; ANSI artwork at 160×60; no-color output;
+and automatic probe timeout fallback. ASCII artwork was also checked in both
+orientations at five dimensions from 160×60 to 1×1. Emitted text/cursor positions stayed within
+terminal bounds; normal output cleared the screen and left prompt space. Original
+termios attributes were preserved. These are byte/state checks, not native-emulator
+visual certification.
+
+The following measurements predate the OS-aware artwork catalog and use the former
+astronaut image; they are retained as historical measurements, not current artwork
+performance claims. Release timings on this Linux machine, warm filesystem caches, ten subprocess
+runs per scenario, including startup and output consumption:
 
 | Scenario | Median | Minimum |
 | --- | ---: | ---: |
-| 80×24 ANSI dashboard, explicit backend | 28.94 ms | 28.00 ms |
-| Automatic dashboard, unanswered 50 ms capability probe | 90.54 ms | 79.89 ms |
-| Dashboard without images | 9.31 ms | 7.71 ms |
-| Plain default output | 6.97 ms | 5.99 ms |
-| Explicit CPU-usage component, plain output | 210.04 ms | 206.18 ms |
+| 80×24 responsive dashboard (art omitted to fit) | 61.08 ms | 59.19 ms |
+| 160×60 dashboard with ANSI artwork | 114.60 ms | 111.84 ms |
+| 80×24 dashboard with `--no-image` | 43.67 ms | 39.53 ms |
+| 160×60 auto backend, unanswered 50 ms probe | 179.37 ms | 164.78 ms |
+| Complete default, plain output | 30.52 ms | 24.20 ms |
 
-Terminal scenarios used a local pseudo-terminal, not a physical emulator. These are
-observations on this machine, not portable latency guarantees. The CPU-usage sample
-interval and probe timeout explain their additional latency. Disable probes or choose
-an explicit backend on slow links; omit CPU usage for the fastest startup.
+These expanded-default measurements are machine/session-specific, not portable
+latency guarantees. PTY polling resolution was 5 ms; image size, mounted disks,
+package databases, and desktop settings affect timing. Probes run only if images
+remain after layout. Use an explicit backend or disable probes to avoid that
+wait, and omit CPU usage when its sampling delay is undesirable.
+
+## Running the expanded default
+
+```sh
+cargo run --release -- --config examples/default.toml
+cargo run --release -- --config examples/default.toml --plain
+cargo run --release -- --config examples/default.toml --layout vertical
+```
+
+A missing normal config is generated on first launch. Existing configs keep their
+chosen component lists. To adopt the new default without replacing your current
+file, copy `examples/default.toml` to a new file and select it with `--config`.
+See the README for configuration paths, module customization, graphics, and styles.
 
 ## Future work
 
-- Run the native graphics visual matrix in Kitty, iTerm2, and a Sixel emulator,
-  including multiple images, transparency, scrolling, and tmux split panes.
-- Add macOS and Windows build/runtime CI and platform-specific collector fixtures.
-- Expand window-manager discovery where a reliable native API is available.
-- Add SVG rasterization only with a bounded, tested dependency and explicit support.
+- Visually validate native graphics in Kitty, iTerm2, and a Sixel emulator,
+  including multiple images, transparency, scrolling, and tmux panes.
+- Add macOS/Windows build/runtime CI and native collector fixtures.
+- Expand package/appearance detection only where reliable native sources exist.
+- Add live terminal-font/profile detection where a native interface is available.
+
+The [artwork guide](artwork.md) lists all renamed images and compatibility behavior.
+Original images add about 84 MiB to the executable; only selected images are decoded.
+The verified Linux release binary is approximately 92 MiB.

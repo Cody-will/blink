@@ -5,6 +5,7 @@ mod graphics;
 mod layout;
 mod measurement;
 mod render;
+mod responsive;
 mod styles;
 mod terminal;
 
@@ -43,12 +44,15 @@ struct Args {
     #[arg(long)]
     plain: bool,
     /// Print a concise, editable configuration without collecting system information.
-    #[arg(long,conflicts_with_all=["list_themes","list_modules","check_config"])]
+    #[arg(long,conflicts_with_all=["list_themes","list_modules","list_images","check_config"])]
     print_config: bool,
-    #[arg(long,conflicts_with_all=["list_modules","check_config"])]
+    #[arg(long,conflicts_with_all=["list_modules","list_images","check_config"])]
     list_themes: bool,
-    #[arg(long, conflicts_with = "check_config")]
+    #[arg(long, conflicts_with_all = ["list_images", "check_config"])]
     list_modules: bool,
+    /// List bundled artwork identifiers and OS defaults without rendering.
+    #[arg(long, conflicts_with = "check_config")]
+    list_images: bool,
     /// Validate configuration and image assets without rendering.
     #[arg(long)]
     check_config: bool,
@@ -68,8 +72,25 @@ fn run() -> anyhow::Result<()> {
         writeln!(output, "{}", config::theme::NAMES.join("\n"))?;
         return Ok(());
     }
+    if args.list_images {
+        for art in graphics::catalog::ARTWORK {
+            let default = art
+                .os
+                .filter(|_| art.id.ends_with("-1"))
+                .map(|os| format!(" [default: {os}]"))
+                .unwrap_or_else(|| {
+                    if art.id == "blink-1" {
+                        " [fallback]".into()
+                    } else {
+                        String::new()
+                    }
+                });
+            writeln!(output, "{}\t{}{default}", art.id, art.description)?;
+        }
+        return Ok(());
+    }
     if args.list_modules {
-        for name in ["system", "hardware", "storage", "session"] {
+        for name in components::PRESETS.iter().copied() {
             if let Some((title, keys)) = components::preset(name) {
                 writeln!(output, "{name} ({title}): {}", keys.join(", "))?;
             }
@@ -121,10 +142,15 @@ fn run() -> anyhow::Result<()> {
             if n.kind == layout::node::Kind::Image {
                 assets.load(n.path.as_deref(), base);
             }
+            if n.kind == layout::node::Kind::Ascii
+                && let Some(path) = &n.path
+            {
+                assets.load_ascii(path, base);
+            }
             if let Some(path) = &n.icon_path {
                 assets.load(Some(path), base);
             }
-            for c in &n.children {
+            for c in n.header.iter().chain(&n.children).chain(&n.footer) {
                 check(c, assets, base);
             }
         }
@@ -167,13 +193,14 @@ fn run() -> anyhow::Result<()> {
     content::prepare(&mut cfg, width, height, args.no_image, args.no_icons, plain);
     let keys = components::system::Snapshot::requested([&cfg.layout.first, &cfg.layout.second]);
     let snapshot = components::system::Snapshot::collect(&keys);
-    let root = content::resolve(&cfg, &snapshot, base, &mut assets)?;
+    let mut root = content::resolve(&cfg, &snapshot, base, &mut assets)?;
     if plain {
         output.write_all(render::plain(&root).as_bytes())?;
     } else {
         fn images(n: &content::Resolved) -> bool {
             n.image.is_some() || n.children.iter().any(images)
         }
+        responsive::adapt(&mut root, Rect::new(0, 0, width, height), color);
         let backend = terminal::backend(
             cfg.graphics,
             is_terminal,

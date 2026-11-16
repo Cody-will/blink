@@ -53,13 +53,38 @@ fn node(
         table.entry("align_h").or_insert_with(|| align.clone());
         table.entry("align_v").or_insert(align);
     }
+    if let Some(art) = table.remove("ascii") {
+        if ["image", "path", "content"]
+            .iter()
+            .any(|key| table.contains_key(*key))
+        {
+            bail!("{path}: specify ascii, image, path, or content, not multiple sources");
+        }
+        kind(table, "ascii", path)?;
+        match art {
+            Value::String(file) => {
+                table.insert("path".into(), Value::String(file));
+            }
+            Value::Table(mut inline)
+                if inline.len() == 1 && inline.get("text").is_some_and(Value::is_str) =>
+            {
+                table.insert(
+                    "content".into(),
+                    inline
+                        .remove("text")
+                        .unwrap_or(Value::String(String::new())),
+                );
+            }
+            _ => bail!("{path}.ascii: expected a file path or {{ text = \"...\" }}"),
+        }
+    }
     if let Some(Value::String(image)) = table.get("image").cloned() {
         kind(table, "image", path)?;
         table.remove("image");
         if table.contains_key("path") {
             bail!("{path}: specify image or path, not both");
         }
-        if image != "builtin" {
+        if !matches!(image.as_str(), "builtin" | "auto") {
             table.insert("path".into(), Value::String(image));
         }
     }
@@ -165,6 +190,19 @@ fn node(
             Value::Table(Table::from_iter([("fixed".into(), Value::Integer(*size))])),
         );
     }
+    for edge in ["header", "footer"] {
+        if let Some(values) = table.remove(edge) {
+            let values = values
+                .as_array()
+                .with_context(|| format!("{path}.{edge} must be a component array"))?;
+            let normalized = values
+                .iter()
+                .enumerate()
+                .map(|(i, v)| component(v.clone(), &format!("{path}.{edge}[{i}]"), depth + 1))
+                .collect::<anyhow::Result<Vec<_>>>()?;
+            table.insert(edge.into(), Value::Array(normalized));
+        }
+    }
     if let Some(Value::Array(children)) = table.get_mut("children") {
         for (i, child) in children.iter_mut().enumerate() {
             let child = child
@@ -205,9 +243,18 @@ pub fn normalize(value: &mut Value) -> anyhow::Result<()> {
                 let table = value
                     .as_table_mut()
                     .with_context(|| format!("layout.{side} must be a table"))?;
+                // Existing explicit layouts retain their fixed structure and no new header/footer.
+                if ["modules", "children", "components"]
+                    .iter()
+                    .any(|key| table.contains_key(*key))
+                {
+                    table.entry("responsive").or_insert(Value::Boolean(false));
+                    table.entry("header").or_insert(Value::Array(vec![]));
+                    table.entry("footer").or_insert(Value::Array(vec![]));
+                }
                 // Changing only a section's direction keeps its default content.
                 if !table.contains_key("type")
-                    && !["modules", "children", "image", "components"]
+                    && !["modules", "children", "image", "ascii", "components"]
                         .iter()
                         .any(|k| table.contains_key(*k))
                     && matches!(

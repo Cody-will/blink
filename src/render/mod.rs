@@ -221,24 +221,27 @@ pub fn compose(root: &Placed<'_>, options: &RenderOptions) -> anyhow::Result<Vec
 }
 /// Plain output follows configuration order rather than terminal-height geometry.
 pub fn plain(root: &Resolved) -> String {
-    fn visit(n: &Resolved, out: &mut Vec<String>) {
+    fn visit(n: &Resolved, out: &mut Vec<(String, bool)>) {
         if n.swatches {
             return;
         }
         if let Some((title, _)) = &n.title {
             if !out.is_empty() {
-                out.push(String::new());
+                out.push((String::new(), false));
             }
-            out.push(title.clone());
+            out.push((title.clone(), false));
         }
         for line in &n.lines {
-            out.push(
-                line.iter()
-                    .map(|(s, _)| s.as_str())
-                    .collect::<String>()
-                    .trim_end()
-                    .to_owned(),
-            );
+            let text = line.iter().map(|(s, _)| s.as_str()).collect::<String>();
+            let art = n.kind == crate::layout::node::Kind::Ascii;
+            out.push((
+                if art {
+                    text
+                } else {
+                    text.trim_end().to_owned()
+                },
+                art,
+            ));
         }
         for child in &n.children {
             visit(child, out);
@@ -246,5 +249,18 @@ pub fn plain(root: &Resolved) -> String {
     }
     let mut lines = vec![];
     visit(root, &mut lines);
-    format!("{}\n", lines.join("\n"))
+    while lines
+        .last()
+        .is_some_and(|(line, art)| line.is_empty() && !art)
+    {
+        lines.pop();
+    }
+    format!(
+        "{}\n",
+        lines
+            .into_iter()
+            .map(|(line, _)| line)
+            .collect::<Vec<_>>()
+            .join("\n")
+    )
 }

@@ -61,7 +61,31 @@ fn first_launch_creates_compact_config_and_preserves_it() {
     let original = std::fs::read(&path).unwrap();
     let generated = String::from_utf8_lossy(&original);
     assert!(generated.contains("gruvbox-material"));
-    assert!(generated.lines().count() < 35);
+    assert!(generated.contains("responsive = true"));
+    for name in [
+        "host",
+        "packages",
+        "swap",
+        "local_ip",
+        "power_adapter",
+        "locale",
+        "wm_theme",
+        "desktop_theme",
+        "icon_theme",
+        "font",
+        "cursor",
+        "terminal_font",
+        "title",
+        "separator",
+        "break",
+        "colors",
+    ] {
+        assert!(
+            generated.contains(&format!("\"{name}\"")),
+            "missing default: {name}"
+        );
+    }
+    assert!(generated.lines().count() < 50);
     assert!(generated.contains(r#"background = "transparent""#));
     assert!(
         f.run(&[
@@ -86,6 +110,7 @@ fn inspection_flags_do_not_create_config() {
     for args in [
         ["--list-themes"],
         ["--list-modules"],
+        ["--list-images"],
         ["--print-config"],
         ["--check-config"],
     ] {
@@ -148,7 +173,14 @@ fn optional_missing_images_do_not_break_normal_rendering() {
 #[test]
 fn documented_examples_validate() {
     let f = Fixture::new();
-    for name in ["default", "vertical", "minimal", "compact", "dashboard"] {
+    for name in [
+        "default",
+        "vertical",
+        "minimal",
+        "compact",
+        "dashboard",
+        "ascii",
+    ] {
         let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("examples/{name}.toml"));
         let result = f.run(&["--config", path.to_str().unwrap(), "--check-config"]);
         assert!(
@@ -188,4 +220,157 @@ fn closed_output_pipe_exits_cleanly() {
         .unwrap();
     drop(child.stdout.take());
     assert!(child.wait_with_output().unwrap().status.success());
+}
+
+#[test]
+fn aliases_and_section_edges_export_without_changing_the_source() {
+    let f = Fixture::new();
+    let text = r#"[layout.second]
+header = ["Title", "Separator"]
+footer = ["Break", "Colors"]
+modules = [{title="Session", components=["DE", "WM", "WMTheme", "Theme", "Icons", "TerminalFont", "LocalIp", "PowerAdapter"]}]
+"#;
+    let path = f.config(text);
+    let result = f.run(&["--config", path.to_str().unwrap(), "--print-config"]);
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let exported = String::from_utf8(result.stdout).unwrap();
+    for name in [
+        "desktop",
+        "window_manager",
+        "wm_theme",
+        "desktop_theme",
+        "icon_theme",
+        "terminal_font",
+        "local_ip",
+        "power_adapter",
+    ] {
+        assert!(exported.contains(&format!("\"{name}\"")));
+    }
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), text);
+    let normalized = f.0.join("normalized.toml");
+    std::fs::write(&normalized, exported).unwrap();
+    assert!(
+        f.run(&["--config", normalized.to_str().unwrap(), "--check-config"])
+            .status
+            .success()
+    );
+}
+
+#[test]
+fn plain_output_keeps_rows_and_omits_palette_at_tiny_dimensions() {
+    let f = Fixture::new();
+    let path = f.config(
+        r#"
+[layout.first]
+visible = false
+[layout.second]
+header = [{name="title", value="fixture@host"}, {name="separator", value="----"}]
+footer = ["break", "colors"]
+components = [{name="os", value="Fixture OS"}, {name="swap", value="Not configured (0 B)"}]
+"#,
+    );
+    let result = f.run(&[
+        "--config",
+        path.to_str().unwrap(),
+        "--plain",
+        "--width",
+        "1",
+        "--height",
+        "1",
+    ]);
+    assert!(result.status.success());
+    assert!(result.stderr.is_empty());
+    let text = String::from_utf8(result.stdout).unwrap();
+    assert!(text.contains("Fixture OS"));
+    assert!(text.contains("Not configured (0 B)"));
+    assert!(!text.contains('\u{1b}'));
+    assert!(!text.contains('█'));
+}
+
+#[test]
+fn bundled_catalog_lists_without_loading_config_and_validates_selected_assets() {
+    let f = Fixture::new();
+    f.config("invalid TOML!!!");
+    let result = f.run(&["--list-images"]);
+    assert!(result.status.success());
+    assert!(result.stderr.is_empty());
+    let text = String::from_utf8(result.stdout).unwrap();
+    assert_eq!(text.lines().count(), 30);
+    assert!(text.contains("arch-1\t") && text.contains("arch-2\t"));
+    assert!(text.contains("[default: arch]") && text.contains("[fallback]"));
+    assert!(text.contains("[default: omarchy]"));
+    assert!(!text.contains('\u{1b}'));
+    for source in [
+        "auto",
+        "builtin",
+        "arch-2",
+        "omarchy-1",
+        "omarchy-2",
+        "omarchy-3.png",
+        "linuxmint-2.png",
+        "Glowing Steampunk Firefly and Wildflowers.png",
+    ] {
+        let path = f.config(&format!("[layout.first]\nimage='{source}'"));
+        let result = f.run(&["--config", path.to_str().unwrap(), "--check-config"]);
+        assert!(
+            result.status.success(),
+            "{source}: {}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+    }
+    assert!(!f.run(&["--list-images", "--check-config"]).status.success());
+    assert!(!f.run(&["--list-images", "--print-config"]).status.success());
+}
+
+#[test]
+fn ascii_file_output_preserves_art_and_validation_reports_missing_or_invalid_files() {
+    let f = Fixture::new();
+    std::fs::write(f.0.join("art.txt"), "  /界\\  \r\n\r\n\tART\n").unwrap();
+    let original = "[layout.first]\nascii='art.txt'\n[layout.second]\nchildren=[]";
+    let path = f.config(original);
+    assert!(
+        f.run(&["--config", path.to_str().unwrap(), "--check-config"])
+            .status
+            .success()
+    );
+    let result = f.run(&[
+        "--config",
+        path.to_str().unwrap(),
+        "--plain",
+        "--no-image",
+        "--width",
+        "1",
+        "--height",
+        "1",
+    ]);
+    assert!(result.status.success());
+    assert!(result.stderr.is_empty());
+    let text = String::from_utf8(result.stdout).unwrap();
+    assert!(text.contains("  /界\\  \n\n        ART\n"), "{text:?}");
+    assert!(!text.contains('\u{1b}'));
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), original);
+    std::fs::write(f.0.join("art.txt"), [0xff]).unwrap();
+    assert!(
+        !f.run(&["--config", path.to_str().unwrap(), "--check-config"])
+            .status
+            .success()
+    );
+    let result = f.run(&["--config", path.to_str().unwrap(), "--plain"]);
+    assert!(result.status.success());
+    assert!(
+        String::from_utf8(result.stdout)
+            .unwrap()
+            .contains("[art unavailable]")
+    );
+    assert!(String::from_utf8(result.stderr).unwrap().contains("UTF-8"));
+    let path = f.config("[layout.first]\nascii='missing.txt'");
+    assert!(
+        !f.run(&["--config", path.to_str().unwrap(), "--check-config"])
+            .status
+            .success()
+    );
 }

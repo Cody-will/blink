@@ -57,7 +57,7 @@ pub struct Display {
 impl Default for Display {
     fn default() -> Self {
         Self {
-            unavailable: Unavailable::Show,
+            unavailable: Unavailable::Hide,
             probe_timeout_ms: 50,
             probe: true,
             cell_width: 8,
@@ -117,20 +117,29 @@ impl Default for Layout {
             second: Node {
                 kind: Kind::Column,
                 gap: 1,
-                children: vec![
-                    module("System", &["os", "hostname", "kernel", "uptime", "shell"]),
-                    module("Hardware", &["cpu", "cpu_cores", "memory"]),
-                    Node {
-                        kind: Kind::Swatches,
-                        size: Size::Auto,
-                        optional: true,
-                        ..Default::default()
-                    },
-                ],
+                responsive: true,
+                header: presentation(&["title", "separator"]),
+                footer: presentation(&["break", "colors"]),
+                children: ["system", "session", "hardware", "storage"]
+                    .into_iter()
+                    .filter_map(components::preset)
+                    .map(|(title, names)| module(title, names))
+                    .collect(),
                 ..Default::default()
             },
         }
     }
+}
+fn presentation(names: &[&str]) -> Vec<Node> {
+    names
+        .iter()
+        .map(|name| Node {
+            kind: Kind::Component,
+            name: (*name).into(),
+            size: Size::Auto,
+            ..Default::default()
+        })
+        .collect()
 }
 pub fn module(title: &str, names: &[&str]) -> Node {
     Node {
@@ -307,6 +316,11 @@ impl Config {
     }
     fn expand_presets(&mut self) -> anyhow::Result<()> {
         fn expand(n: &mut Node) -> anyhow::Result<()> {
+            if n.kind == Kind::Component
+                && let Some(name) = components::canonical(&n.name)
+            {
+                n.name = name.into();
+            }
             if let Some(preset) = n.preset.take() {
                 if n.kind != Kind::Module || !n.children.is_empty() {
                     bail!("Module preset requires a module without explicit children");
@@ -318,7 +332,12 @@ impl Config {
                     n.title = title.into();
                 }
             }
-            for c in &mut n.children {
+            for c in n
+                .header
+                .iter_mut()
+                .chain(&mut n.children)
+                .chain(&mut n.footer)
+            {
                 expand(c)?;
             }
             Ok(())
@@ -376,7 +395,17 @@ impl Config {
             {
                 bail!("{path}.name: unknown component {:?}", n.name);
             }
-            if !matches!(n.kind, Kind::Row | Kind::Column | Kind::Module) && !n.children.is_empty()
+            if n.kind == Kind::Ascii && n.image != crate::layout::node::ImageOptions::default() {
+                bail!("{path}: ASCII art does not use raster image fitting options");
+            }
+            if n.kind == Kind::Ascii && n.path.is_some() && !n.content.is_empty() {
+                bail!("{path}: ASCII art accepts a file path or inline content, not both");
+            }
+            if n.responsive && n.kind != Kind::Column {
+                bail!("{path}: responsive requires a column container");
+            }
+            if !matches!(n.kind, Kind::Row | Kind::Column | Kind::Module)
+                && (!n.children.is_empty() || !n.header.is_empty() || !n.footer.is_empty())
             {
                 bail!("{path}: leaf nodes cannot contain children");
             }
@@ -397,7 +426,13 @@ impl Config {
                     .colors(p)
                     .with_context(|| format!("{path}.{name}"))?;
             }
-            for (i, c) in n.children.iter().enumerate() {
+            for (i, c) in n
+                .header
+                .iter()
+                .chain(&n.children)
+                .chain(&n.footer)
+                .enumerate()
+            {
                 check(c, cfg, p, depth + 1, &format!("{path}.children[{i}]"))?;
             }
             Ok(())

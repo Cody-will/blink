@@ -167,6 +167,7 @@ fn unmappable_legacy_settings_fail_explicitly() {
 fn missing_metrics_render_na_or_hide() {
     let text = "[layout.first]\ntype='module'\nchildren=[{type='component',name='battery',size='auto'}]\n[layout.second]\nchildren=[]";
     let mut cfg = Config::parse(text).unwrap();
+    cfg.display.unavailable = Unavailable::Show;
     let root = content::resolve(
         &cfg,
         &Snapshot::default(),
@@ -313,7 +314,13 @@ fn optional_default_visuals_are_removed_on_small_terminals() {
     let mut cfg = Config::default();
     content::prepare(&mut cfg, 30, 10, false, false, false);
     assert!(!cfg.layout.first.visible);
-    assert!(!cfg.layout.second.children[2].visible);
+    assert!(
+        cfg.layout
+            .second
+            .children
+            .iter()
+            .all(|module| module.visible)
+    );
 }
 #[test]
 fn missing_images_degrade_to_placeholders() {
@@ -781,7 +788,7 @@ fn compact_default_is_short_editable_and_transparent() {
     let cfg = Config::default();
     let text = cfg.editable_toml().unwrap();
     assert!(
-        text.lines().count() < 35,
+        text.lines().count() < 50,
         "{} lines: {text}",
         text.lines().count()
     );
@@ -837,7 +844,7 @@ fn compact_export_preserves_old_verbose_configs_and_advanced_examples() {
     let verbose = toml::to_string_pretty(&cfg).unwrap();
     let old = Config::parse(&verbose).unwrap();
     let compact = old.editable_toml().unwrap();
-    assert!(compact.lines().count() < 60);
+    assert!(compact.lines().count() < 80);
     assert_eq!(
         toml::Value::try_from(Config::parse(&compact).unwrap()).unwrap(),
         toml::Value::try_from(old).unwrap()
@@ -877,10 +884,10 @@ fn shorthand_empty_arrays_clear_defaults_and_presets_expand() {
 #[test]
 fn partial_section_shortcuts_keep_default_modules() {
     let cfg = Config::parse("[layout.second]\nswatches=false").unwrap();
-    assert_eq!(cfg.layout.second.children.len(), 2);
+    assert_eq!(cfg.layout.second.children.len(), 4);
     let cfg = Config::parse("[layout.second]\ndirection='horizontal'").unwrap();
     assert_eq!(cfg.layout.second.kind, Kind::Row);
-    assert_eq!(cfg.layout.second.children.len(), 3);
+    assert_eq!(cfg.layout.second.children.len(), 4);
 }
 #[test]
 fn ambiguous_or_invalid_shorthand_has_errors() {
@@ -1001,5 +1008,291 @@ fn fill_children_use_main_axis_space_without_exceeding_alignment_bounds() {
     assert_eq!(
         parent.place(Rect::new(0, 0, 20, 12)).children[0].area,
         Rect::new(8, 0, 3, 12)
+    );
+}
+
+fn configured_names(node: &layout::node::Node) -> BTreeSet<String> {
+    let mut names = BTreeSet::new();
+    if node.kind == Kind::Component && node.visible {
+        names.insert(node.name.clone());
+    }
+    for child in node.header.iter().chain(&node.children).chain(&node.footer) {
+        names.extend(configured_names(child));
+    }
+    names
+}
+fn resolved_names(node: &Resolved) -> BTreeSet<String> {
+    let mut names = BTreeSet::new();
+    if let Some(name) = &node.component_name {
+        names.insert(name.clone());
+    }
+    for child in &node.children {
+        names.extend(resolved_names(child));
+    }
+    names
+}
+fn full_snapshot() -> Snapshot {
+    let mut snapshot = Snapshot::default();
+    for d in components::DEFINITIONS {
+        if d.presentation() == components::Presentation::Data {
+            snapshot.values.insert(
+                d.name.into(),
+                Measurement::Text(format!("{}_VALUE", d.name)),
+            );
+        }
+    }
+    snapshot
+        .values
+        .insert("title".into(), Measurement::Text("fixture@machine".into()));
+    snapshot
+}
+#[test]
+fn fastfetch_default_fixture_is_fully_covered_and_enabled_in_compact_config() {
+    let upstream = include_str!("../tests/fixtures/fastfetch-2.71-defaults.txt")
+        .trim()
+        .split(':')
+        .collect::<Vec<_>>();
+    assert_eq!(upstream.len(), 29);
+    let names = upstream
+        .iter()
+        .map(|name| components::canonical(name).unwrap_or_else(|| panic!("Missing {name}")))
+        .collect::<BTreeSet<_>>();
+    assert_eq!(names.len(), 29);
+    let cfg = Config::default();
+    let configured = configured_names(&cfg.layout.second);
+    assert!(names.iter().all(|name| configured.contains(*name)));
+    assert!(configured.contains("hostname") && configured.contains("cpu_cores"));
+    assert_eq!(cfg.display.unavailable, Unavailable::Hide);
+    let exported = cfg.editable_toml().unwrap();
+    assert!(exported.lines().count() < 50);
+    assert!(exported.contains("header = [\"title\", \"separator\"]"));
+    assert!(exported.contains("responsive = true"));
+    assert_eq!(components::definition("host").unwrap().label, "Host");
+    assert_eq!(
+        components::definition("hostname").unwrap().label,
+        "Hostname"
+    );
+}
+#[test]
+fn fastfetch_aliases_normalize_and_presentation_entries_do_not_request_fake_metrics() {
+    let cfg=Config::parse("[layout.first]\ncomponents=['DE','WM','WMTheme','Theme','Icons','TerminalFont','LocalIp','PowerAdapter','Title','Separator','Break','Colors']\n[layout.second]\nmodules=[]").unwrap();
+    let requested = Snapshot::requested([&cfg.layout.first, &cfg.layout.second]);
+    assert_eq!(
+        requested,
+        BTreeSet::from(
+            [
+                "desktop",
+                "window_manager",
+                "wm_theme",
+                "desktop_theme",
+                "icon_theme",
+                "terminal_font",
+                "local_ip",
+                "power_adapter",
+                "title"
+            ]
+            .map(str::to_owned)
+        )
+    );
+    cfg.editable_toml().unwrap();
+}
+#[test]
+fn presentation_entries_measure_unicode_title_and_ansi_palette() {
+    let mut snapshot = Snapshot::default();
+    snapshot
+        .values
+        .insert("title".into(), Measurement::Text("用户@host".into()));
+    let cfg=Config::parse("[layout.first]\nheader=['title','separator']\nmodules=[]\nfooter=['break','colors']\n[layout.second]\nmodules=[]").unwrap();
+    let root = content::resolve(
+        &cfg,
+        &snapshot,
+        Path::new("."),
+        &mut graphics::assets::Assets::default(),
+    )
+    .unwrap();
+    let section = &root.children[0].children[0];
+    assert_eq!(section.children[0].lines[0][0].0, "用户@host");
+    assert_eq!(section.children[1].measure().0, 9);
+    assert_eq!(section.children[2].measure().1, 1);
+    let colors = &section.children[3];
+    assert_eq!(colors.lines.len(), 2);
+    assert_eq!(colors.lines[0][0].1.foreground, "0");
+    assert_eq!(colors.lines[1][7].1.foreground, "15");
+    let plain = render::plain(&root);
+    assert!(plain.contains("用户@host"));
+    assert!(!plain.contains('█'));
+    assert!(!plain.contains('\x1b'));
+}
+#[test]
+fn zero_swap_is_a_known_measurement_without_a_fabricated_percentage() {
+    let value = Measurement::Memory { used: 0, total: 0 }.format();
+    assert_eq!(value, "Not configured (0 B)");
+    assert!(!value.contains('%'));
+}
+#[test]
+fn explicit_custom_sections_remain_fixed_and_keep_their_old_structure() {
+    for text in [
+        "[layout.second]\nmodules=['system','hardware']",
+        "[layout.second]\ntype='column'\nchildren=[{type='module',preset='system'}]",
+    ] {
+        let cfg = Config::parse(text).unwrap();
+        assert!(!cfg.layout.second.responsive);
+        assert!(cfg.layout.second.header.is_empty() && cfg.layout.second.footer.is_empty());
+        cfg.editable_toml().unwrap();
+        let mut root = content::resolve(
+            &cfg,
+            &full_snapshot(),
+            Path::new("."),
+            &mut graphics::assets::Assets::default(),
+        )
+        .unwrap();
+        let before = root
+            .place(Rect::new(0, 0, 80, 22))
+            .children
+            .iter()
+            .map(|c| c.area)
+            .collect::<Vec<_>>();
+        let names = resolved_names(&root);
+        responsive::adapt(&mut root, Rect::new(0, 0, 80, 22), true);
+        assert_eq!(names, resolved_names(&root));
+        assert_eq!(
+            before,
+            root.place(Rect::new(0, 0, 80, 22))
+                .children
+                .iter()
+                .map(|c| c.area)
+                .collect::<Vec<_>>()
+        );
+    }
+}
+fn assert_placed_bounds(node: &layout::engine::Placed<'_>) {
+    for child in &node.children {
+        assert!(child.area.x >= node.area.x && child.area.y >= node.area.y);
+        assert!(
+            u32::from(child.area.x) + u32::from(child.area.width)
+                <= u32::from(node.area.x) + u32::from(node.area.width)
+        );
+        assert!(
+            u32::from(child.area.y) + u32::from(child.area.height)
+                <= u32::from(node.area.y) + u32::from(node.area.height)
+        );
+        assert_placed_bounds(child);
+    }
+}
+#[test]
+fn responsive_defaults_adapt_without_changing_plain_output_or_config() {
+    let cfg = Config::default();
+    let before = toml::Value::try_from(&cfg).unwrap();
+    let root = content::resolve(
+        &cfg,
+        &full_snapshot(),
+        Path::new("."),
+        &mut graphics::assets::Assets::default(),
+    )
+    .unwrap();
+    let original_names = resolved_names(&root);
+    let plain = render::plain(&root);
+    for (width, height) in [
+        (80, 22),
+        (120, 38),
+        (160, 58),
+        (32, 10),
+        (3, 2),
+        (1, 1),
+        (0, 0),
+    ] {
+        let mut adapted = root.clone();
+        responsive::adapt(&mut adapted, Rect::new(0, 0, width, height), true);
+        assert_placed_bounds(&adapted.place(Rect::new(0, 0, width, height)));
+        let names = resolved_names(&adapted);
+        assert!(names.contains("os") && names.contains("cpu") && names.contains("memory"));
+        if width == 80 {
+            assert!(names.len() < original_names.len());
+            assert!(!names.contains("terminal_font"));
+            assert_eq!(adapted.children.len(), 1);
+        }
+        if width == 160 {
+            assert_eq!(names, original_names);
+            assert_eq!(adapted.children.len(), 2);
+        }
+    }
+    assert_eq!(plain, render::plain(&root));
+    assert_eq!(before, toml::Value::try_from(&cfg).unwrap());
+    assert!(plain.contains("terminal_font_VALUE") && plain.contains("local_ip_VALUE"));
+}
+#[test]
+fn responsive_layout_respects_both_splits_alignment_and_multiline_metrics() {
+    let mut snapshot = full_snapshot();
+    snapshot.values.insert(
+        "disk".into(),
+        Measurement::Text("/ one\n/home two\n/data three".into()),
+    );
+    snapshot
+        .values
+        .insert("gpu".into(), Measurement::Text("GPU one\nGPU two".into()));
+    for direction in [Direction::Horizontal, Direction::Vertical] {
+        let mut cfg = Config::default();
+        cfg.layout.direction = direction;
+        cfg.layout.second.align_h = Some(Alignment::Center);
+        cfg.layout.second.align_v = Some(Alignment::Center);
+        let root = content::resolve(
+            &cfg,
+            &snapshot,
+            Path::new("."),
+            &mut graphics::assets::Assets::default(),
+        )
+        .unwrap();
+        for (width, height) in [(80, 22), (160, 58), (10, 4)] {
+            let mut adapted = root.clone();
+            responsive::adapt(&mut adapted, Rect::new(0, 0, width, height), true);
+            assert_placed_bounds(&adapted.place(Rect::new(0, 0, width, height)));
+            render::compose(
+                &adapted.place(Rect::new(0, 0, width, height)),
+                &options(Backend::Text),
+            )
+            .unwrap();
+        }
+    }
+}
+
+#[test]
+fn native_measurements_format_without_losing_source_or_connection_state() {
+    use crate::components::system::{Adapter, Host};
+    assert_eq!(
+        Measurement::Host(Host {
+            vendor: Some("Vendor".into()),
+            model: "Model".into(),
+            version: None,
+        })
+        .format(),
+        "Vendor Model"
+    );
+    assert_eq!(
+        Measurement::Packages(vec![("dpkg".into(), 0), ("flatpak".into(), 7)]).format(),
+        "0 (dpkg), 7 (flatpak)"
+    );
+    assert_eq!(
+        Measurement::Addresses(vec![(
+            "eth0".into(),
+            vec!["192.0.2.1".parse().unwrap(), "2001:db8::1".parse().unwrap()]
+        )])
+        .format(),
+        "eth0: 192.0.2.1, 2001:db8::1"
+    );
+    assert_eq!(
+        Measurement::Adapters(vec![
+            Adapter {
+                name: "AC".into(),
+                online: false,
+                watts: None
+            },
+            Adapter {
+                name: "USB".into(),
+                online: true,
+                watts: Some(12.5)
+            },
+        ])
+        .format(),
+        "AC: Disconnected\nUSB: Connected (12.5 W now)"
     );
 }

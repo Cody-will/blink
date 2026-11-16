@@ -14,7 +14,13 @@ use std::{path::Path, rc::Rc};
 use unicode_width::UnicodeWidthStr;
 
 pub type Line = Vec<(String, TextStyleConfig)>;
+#[derive(Clone)]
 pub struct Resolved {
+    pub kind: Kind,
+    pub responsive: bool,
+    pub optional: bool,
+    pub role: Role,
+    pub component_name: Option<String>,
     pub size: Size,
     pub direction: Direction,
     pub gap: u16,
@@ -32,6 +38,7 @@ pub struct Resolved {
     pub cell_ratio: f64,
     pub image_columns: u16,
 }
+#[derive(Clone)]
 pub struct ComponentRow {
     pub icon: String,
     pub label: String,
@@ -40,9 +47,20 @@ pub struct ComponentRow {
     pub label_style: TextStyleConfig,
     pub value_style: TextStyleConfig,
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Role {
+    Header,
+    Body,
+    Footer,
+}
 impl Resolved {
     pub fn empty(container: ContainerStyleConfig) -> Self {
         Self {
+            kind: Kind::Column,
+            responsive: false,
+            optional: false,
+            role: Role::Body,
+            component_name: None,
             size: Size::Fill,
             direction: Direction::Vertical,
             gap: 0,
@@ -77,29 +95,57 @@ pub fn prepare(
     if no_icons || plain {
         cfg.icons.enabled = false;
     }
-    fn visit(n: &mut Node, width: u16, height: u16, no_image: bool, plain: bool) {
+    fn visit(
+        n: &mut Node,
+        width: u16,
+        height: u16,
+        no_image: bool,
+        plain: bool,
+        in_responsive: bool,
+    ) {
+        let responsive = in_responsive || n.responsive;
         if n.kind == Kind::Image && (no_image || plain || n.optional && (width < 64 || height < 20))
         {
             n.visible = false;
         }
+        if n.kind == Kind::Ascii && n.optional && !plain && (width < 64 || height < 20) {
+            n.visible = false;
+        }
         if n.optional
-            && (n.kind == Kind::Swatches && (height < 24 || width < 64)
-                || plain && n.kind == Kind::Swatches)
+            && n.kind == Kind::Swatches
+            && (plain || !responsive && (height < 24 || width < 64))
         {
             n.visible = false;
         }
-        if !plain && n.optional && n.kind == Kind::Component && (width < 40 || height < 14) {
+        if !plain
+            && !responsive
+            && n.optional
+            && n.kind == Kind::Component
+            && (width < 40 || height < 14)
+        {
             n.visible = false;
         }
         if no_image || plain {
             n.icon_path = None;
         }
-        for c in &mut n.children {
-            visit(c, width, height, no_image, plain);
+        for child in n
+            .header
+            .iter_mut()
+            .chain(&mut n.children)
+            .chain(&mut n.footer)
+        {
+            visit(child, width, height, no_image, plain, responsive);
         }
     }
-    visit(&mut cfg.layout.first, width, height, no_image, plain);
-    visit(&mut cfg.layout.second, width, height, no_image, plain);
+    visit(&mut cfg.layout.first, width, height, no_image, plain, false);
+    visit(
+        &mut cfg.layout.second,
+        width,
+        height,
+        no_image,
+        plain,
+        false,
+    );
 }
 pub fn resolve(
     cfg: &Config,
@@ -126,6 +172,12 @@ pub fn resolve(
         };
         let mut r = Resolved::empty(override_style(&base_style, &n.style)?.colors(p)?);
         r.cell_ratio = f64::from(cfg.display.cell_height) / f64::from(cfg.display.cell_width);
+        r.kind = n.kind;
+        r.responsive = n.responsive;
+        r.optional = n.optional;
+        if n.kind == Kind::Component && n.value.is_none() {
+            r.component_name = Some(n.name.clone());
+        }
         r.size = n.size;
         r.gap = n.gap;
         r.children_align_h = n.align_h;
@@ -146,42 +198,99 @@ pub fn resolve(
                     r.lines.push(vec![(line.into(), text.clone())]);
                 }
             }
-            Kind::Component => {
-                let value = n.value.clone().or_else(|| snapshot.formatted(&n.name));
-                if value.is_none() && cfg.display.unavailable == Unavailable::Hide {
-                    return Ok(None);
-                }
-                let label = n.label.as_deref().unwrap_or_else(|| {
-                    components::definition(&n.name)
-                        .map(|d| d.label)
-                        .unwrap_or(&n.name)
-                });
-                let icon = if cfg.icons.enabled {
-                    n.icon
-                        .as_deref()
-                        .unwrap_or_else(|| components::icon(&n.name, cfg.icons.mode))
+            Kind::Ascii => {
+                let art = if let Some(path) = &n.path {
+                    assets
+                        .load_ascii(path, base)
+                        .unwrap_or_else(|| Rc::from("[art unavailable]"))
                 } else {
-                    ""
+                    Rc::from(crate::graphics::assets::ascii(&n.content))
                 };
-                r.component = Some(ComponentRow {
-                    icon: clean(icon).replace('\n', ""),
-                    label: clean(label).replace('\n', ""),
-                    value: clean(value.as_deref().unwrap_or("N/A")),
-                    icon_style: override_style(&cfg.styles.icon, &n.icon_style)?.colors(p)?,
-                    label_style: override_style(&cfg.styles.label, &n.label_style)?.colors(p)?,
-                    value_style: text,
-                });
-                // Raster icons have their own bounded sibling region, never print file paths as glyphs.
-                if cfg.icons.enabled
-                    && let Some(path) = &n.icon_path
-                {
-                    let mut icon = Resolved::empty(ContainerStyleConfig::plain());
-                    icon.image = assets.load(Some(path), base);
-                    icon.size = Size::Fixed(2);
-                    icon.image_columns = 2;
-                    if icon.image.is_some() {
-                        r.children.push(icon);
-                        r.direction = Direction::Horizontal;
+                for line in art.split('\n') {
+                    r.lines.push(vec![(line.into(), text.clone())]);
+                }
+            }
+            Kind::Component => {
+                let presentation = if n.value.is_none() {
+                    components::definition(&n.name)
+                        .map(|d| d.presentation())
+                        .unwrap_or(components::Presentation::Data)
+                } else {
+                    components::Presentation::Data
+                };
+                match presentation {
+                    components::Presentation::Title | components::Presentation::Separator => {
+                        let title = snapshot.formatted("title");
+                        if title.is_none() && cfg.display.unavailable == Unavailable::Hide {
+                            return Ok(None);
+                        }
+                        let title = clean(title.as_deref().unwrap_or("N/A"));
+                        let output = if presentation == components::Presentation::Separator {
+                            "─".repeat(title.width().min(512))
+                        } else {
+                            title
+                        };
+                        r.lines.push(vec![(output, cfg.styles.title.colors(p)?)]);
+                    }
+                    components::Presentation::Break => r.lines.push(vec![(String::new(), text)]),
+                    components::Presentation::Colors => {
+                        r.swatches = true;
+                        for start in [0, 8] {
+                            r.lines.push(
+                                (start..start + 8)
+                                    .map(|index| {
+                                        (
+                                            "██".into(),
+                                            TextStyleConfig {
+                                                foreground: index.to_string(),
+                                                ..text.clone()
+                                            },
+                                        )
+                                    })
+                                    .collect(),
+                            );
+                        }
+                    }
+                    components::Presentation::Data => {
+                        let value = n.value.clone().or_else(|| snapshot.formatted(&n.name));
+                        if value.is_none() && cfg.display.unavailable == Unavailable::Hide {
+                            return Ok(None);
+                        }
+                        let label = n.label.as_deref().unwrap_or_else(|| {
+                            components::definition(&n.name)
+                                .map(|d| d.label)
+                                .unwrap_or(&n.name)
+                        });
+                        let icon = if cfg.icons.enabled {
+                            n.icon
+                                .as_deref()
+                                .unwrap_or_else(|| components::icon(&n.name, cfg.icons.mode))
+                        } else {
+                            ""
+                        };
+                        r.component = Some(ComponentRow {
+                            icon: clean(icon).replace('\n', ""),
+                            label: clean(label).replace('\n', ""),
+                            value: clean(value.as_deref().unwrap_or("N/A")),
+                            icon_style: override_style(&cfg.styles.icon, &n.icon_style)?
+                                .colors(p)?,
+                            label_style: override_style(&cfg.styles.label, &n.label_style)?
+                                .colors(p)?,
+                            value_style: text,
+                        });
+                        // Raster icons have their own bounded sibling region, never print file paths as glyphs.
+                        if cfg.icons.enabled
+                            && let Some(path) = &n.icon_path
+                        {
+                            let mut icon = Resolved::empty(ContainerStyleConfig::plain());
+                            icon.image = assets.load(Some(path), base);
+                            icon.size = Size::Fixed(2);
+                            icon.image_columns = 2;
+                            if icon.image.is_some() {
+                                r.children.push(icon);
+                                r.direction = Direction::Horizontal;
+                            }
+                        }
                     }
                 }
             }
@@ -220,10 +329,24 @@ pub fn resolve(
             }
             _ => {}
         }
-        for child in &n.children {
-            if let Some(child) = build(child, cfg, snapshot, base, assets, p)? {
-                r.children.push(child);
+        for (nodes, role) in [
+            (&n.header, Role::Header),
+            (&n.children, Role::Body),
+            (&n.footer, Role::Footer),
+        ] {
+            for child in nodes {
+                if let Some(mut child) = build(child, cfg, snapshot, base, assets, p)? {
+                    child.role = role;
+                    r.children.push(child);
+                }
             }
+        }
+        if n.kind == Kind::Module
+            && !n.children.is_empty()
+            && r.children.is_empty()
+            && cfg.display.unavailable == Unavailable::Hide
+        {
+            return Ok(None);
         }
         if matches!(n.kind, Kind::Row | Kind::Column) && r.children.is_empty() && r.title.is_none()
         {
@@ -243,6 +366,7 @@ pub fn resolve(
         if let Some(mut child) = build(n, cfg, snapshot, base, assets, &palette)? {
             let mut section = Resolved::empty(cfg.styles.section.colors(&palette)?);
             section.size = child.size;
+            section.optional = child.optional;
             child.size = Size::Fill;
             section.children.push(child);
             root.children.push(section);

@@ -1,0 +1,26 @@
+background = "transparent"
+theme = "gruvbox-material"
+
+[layout]
+direction = "horizontal"
+
+[layout.first]
+ascii = { text = '''
+  /\_/\
+ ( o.o )
+  > ^ <
+''' }
+size = "35%"
+optional = true
+
+[layout.first.style]
+align_h = "center"
+align_v = "center"
+
+[layout.first.text_style]
+foreground = "@accent"
+
+[layout.second]
+responsive = true
+header = ["title", "separator"]
+modules = ["system", "hardware"]

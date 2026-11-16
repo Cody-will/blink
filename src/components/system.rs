@@ -22,6 +22,22 @@ pub enum Measurement {
     },
     Disks(Vec<Disk>),
     Batteries(Vec<Battery>),
+    Host(Host),
+    Packages(Vec<(String, u64)>),
+    Addresses(Vec<(String, Vec<std::net::IpAddr>)>),
+    Adapters(Vec<Adapter>),
+}
+#[derive(Debug, Clone)]
+pub struct Host {
+    pub vendor: Option<String>,
+    pub model: String,
+    pub version: Option<String>,
+}
+#[derive(Debug, Clone)]
+pub struct Adapter {
+    pub name: String,
+    pub online: bool,
+    pub watts: Option<f64>,
 }
 #[derive(Debug, Clone)]
 pub struct Disk {
@@ -44,10 +60,22 @@ impl Snapshot {
             if !n.visible {
                 return;
             }
-            if n.kind == Kind::Component && n.value.is_none() {
-                keys.insert(n.name.clone());
+            if n.kind == Kind::Component
+                && n.value.is_none()
+                && let Some(d) = crate::components::definition(&n.name)
+            {
+                match d.presentation() {
+                    crate::components::Presentation::Data => {
+                        keys.insert(n.name.clone());
+                    }
+                    crate::components::Presentation::Title
+                    | crate::components::Presentation::Separator => {
+                        keys.insert("title".into());
+                    }
+                    _ => {}
+                }
             }
-            for c in &n.children {
+            for c in n.header.iter().chain(&n.children).chain(&n.footer) {
                 visit(c, keys);
             }
         }
@@ -65,7 +93,7 @@ impl Snapshot {
         let need_ram = keys.iter().any(|k| {
             matches!(
                 k.as_str(),
-                "memory" | "total_ram" | "used_ram" | "memory_percentage"
+                "memory" | "total_ram" | "used_ram" | "memory_percentage" | "swap"
             )
         });
         let mut refresh = RefreshKind::nothing();
@@ -77,7 +105,11 @@ impl Snapshot {
             });
         }
         if need_ram {
-            refresh = refresh.with_memory(MemoryRefreshKind::nothing().with_ram());
+            refresh = refresh.with_memory(if keys.contains("swap") {
+                MemoryRefreshKind::nothing().with_ram().with_swap()
+            } else {
+                MemoryRefreshKind::nothing().with_ram()
+            });
         }
         let mut sys = if need_cpu || need_ram {
             System::new_with_specifics(refresh).ok()
@@ -85,11 +117,18 @@ impl Snapshot {
             None
         };
         let sample_started = Instant::now();
+        let hostname = if keys.contains("hostname") || keys.contains("title") {
+            System::host_name().ok()
+        } else {
+            None
+        };
+        out.values
+            .extend(super::native::collect(keys, hostname.as_deref()));
         for key in keys {
             let value = match key.as_str() {
                 "os" => System::name().ok().map(Measurement::Text),
                 "distribution" => System::long_os_version().ok().map(Measurement::Text),
-                "hostname" => System::host_name().ok().map(Measurement::Text),
+                "hostname" => hostname.clone().map(Measurement::Text),
                 "kernel" => System::kernel_version().ok().map(Measurement::Text),
                 "architecture" => Some(Measurement::Text(System::cpu_arch())),
                 "uptime" => System::uptime().ok().map(Measurement::Seconds),
@@ -129,6 +168,10 @@ impl Snapshot {
                             total: s.total_memory(),
                         })
                 }
+                "swap" => sys.as_ref().map(|s| Measurement::Memory {
+                    used: s.used_swap(),
+                    total: s.total_swap(),
+                }),
                 "total_ram" => sys
                     .as_ref()
                     .filter(|s| s.total_memory() > 0)
@@ -197,10 +240,56 @@ impl Snapshot {
 impl Measurement {
     pub fn format(&self) -> String {
         match self {
+            Self::Host(host) => [
+                host.vendor.as_deref(),
+                Some(host.model.as_str()),
+                host.version.as_deref(),
+            ]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join(" "),
+            Self::Packages(counts) => counts
+                .iter()
+                .map(|(name, n)| format!("{n} ({name})"))
+                .collect::<Vec<_>>()
+                .join(", "),
+            Self::Addresses(addresses) => addresses
+                .iter()
+                .map(|(name, ips)| {
+                    format!(
+                        "{name}: {}",
+                        ips.iter()
+                            .map(ToString::to_string)
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n"),
+            Self::Adapters(adapters) => adapters
+                .iter()
+                .map(|a| {
+                    format!(
+                        "{}: {}{}",
+                        a.name,
+                        if a.online {
+                            "Connected"
+                        } else {
+                            "Disconnected"
+                        },
+                        a.watts
+                            .map(|w| format!(" ({w:.1} W now)"))
+                            .unwrap_or_default()
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n"),
             Self::Text(s) => s.clone(),
             Self::Bytes(n) => bytes(*n),
             Self::Percent(p) => format!("{p:.1}%"),
             Self::Seconds(n) => format!("{}d {}h {}m", n / 86400, n / 3600 % 24, n / 60 % 60),
+            Self::Memory { total: 0, .. } => "Not configured (0 B)".into(),
             Self::Memory { used, total } => format!(
                 "{} / {} ({:.1}%)",
                 bytes(*used),

@@ -6,18 +6,29 @@ direction = "horizontal"
 gap = 1
 
 [layout.first]
-image = "builtin"
+image = "auto"
 size = "35%"
 
 [layout.second]
 direction = "vertical"
+footer = ["break", "colors"]
+header = ["title", "separator"]
+responsive = true
 size = "fill"
-swatches = true
+swatches = false
 
 [[layout.second.modules]]
-components = ["os", "hostname", "kernel", "uptime", "shell"]
+components = ["os", "host", "hostname", "kernel", "uptime", "packages", "shell", "locale"]
 title = "System"
 
 [[layout.second.modules]]
-components = ["cpu", "cpu_cores", "memory"]
+components = ["display", "desktop", "window_manager", "wm_theme", "desktop_theme", "icon_theme", "font", "cursor", "terminal", "terminal_font"]
+title = "Session"
+
+[[layout.second.modules]]
+components = ["cpu", "cpu_cores", "gpu", "memory", "swap"]
 title = "Hardware"
+
+[[layout.second.modules]]
+components = ["disk", "local_ip", "battery", "power_adapter"]
+title = "Storage & Power"

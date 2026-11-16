@@ -49,7 +49,7 @@ fn node(n: &Node, base: &Node, component: bool, module: bool) -> anyhow::Result<
         .and_then(|v| v.as_table().cloned())
         .unwrap_or_default();
     // Content lists always replace, including deliberately empty lists.
-    for field in ["children", "image", "preset"] {
+    for field in ["children", "image", "preset", "header", "footer"] {
         table.remove(field);
     }
     table.insert("size".into(), size(n.size));
@@ -69,7 +69,7 @@ fn node(n: &Node, base: &Node, component: bool, module: bool) -> anyhow::Result<
     }
     match n.kind {
         Kind::Image => {
-            if n.path.as_deref() != Some("builtin")
+            if !matches!(n.path.as_deref(), Some("builtin" | "auto"))
                 && Value::try_from(&n.image)?
                     == Value::try_from(crate::layout::node::ImageOptions::default())?
             {
@@ -77,27 +77,30 @@ fn node(n: &Node, base: &Node, component: bool, module: bool) -> anyhow::Result<
                 table.remove("path");
                 table.insert(
                     "image".into(),
-                    Value::String(n.path.clone().unwrap_or_else(|| "builtin".into())),
+                    Value::String(n.path.clone().unwrap_or_else(|| "auto".into())),
                 );
             } else {
                 table.insert("image".into(), Value::try_from(&n.image)?);
             }
         }
+        Kind::Ascii => {
+            // Use the concise source form for both file-backed and inline text art.
+            table.remove("type");
+            table.remove("path");
+            table.remove("content");
+            let source = if let Some(path) = &n.path {
+                Value::String(path.clone())
+            } else {
+                Value::Table(Table::from_iter([(
+                    "text".into(),
+                    Value::String(n.content.clone()),
+                )]))
+            };
+            table.insert("ascii".into(), source);
+        }
         Kind::Module => {
             if n.children.iter().all(|c| c.kind == Kind::Component) {
-                let values = n
-                    .children
-                    .iter()
-                    .map(|c| {
-                        let default = component_default(&c.name);
-                        if Value::try_from(c)? == Value::try_from(&default)? {
-                            Ok(Value::String(c.name.clone()))
-                        } else {
-                            node(c, &default, true, false)
-                        }
-                    })
-                    .collect::<anyhow::Result<Vec<_>>>()?;
-                table.insert("components".into(), Value::Array(values));
+                table.insert("components".into(), component_values(&n.children)?);
             } else {
                 table.insert("children".into(), children(&n.children)?);
             }
@@ -158,6 +161,14 @@ fn node(n: &Node, base: &Node, component: bool, module: bool) -> anyhow::Result<
         }
         _ => {}
     }
+    for (key, nodes) in [("header", &n.header), ("footer", &n.footer)] {
+        if !nodes.is_empty() {
+            table.insert(key.into(), component_values(nodes)?);
+        }
+    }
+    if n.responsive {
+        table.insert("responsive".into(), Value::Boolean(true));
+    }
     // Node-specific image options only belong on image nodes, unless explicitly customized.
     if n.kind != Kind::Image && n.image != crate::layout::node::ImageOptions::default() {
         table.insert("image".into(), Value::try_from(&n.image)?);
@@ -168,6 +179,21 @@ fn node(n: &Node, base: &Node, component: bool, module: bool) -> anyhow::Result<
         table.insert("align".into(), Value::try_from(align)?);
     }
     Ok(Value::Table(table))
+}
+fn component_values(nodes: &[Node]) -> anyhow::Result<Value> {
+    Ok(Value::Array(
+        nodes
+            .iter()
+            .map(|c| {
+                let default = component_default(&c.name);
+                if Value::try_from(c)? == Value::try_from(&default)? {
+                    Ok(Value::String(c.name.clone()))
+                } else {
+                    node(c, &default, true, false)
+                }
+            })
+            .collect::<anyhow::Result<_>>()?,
+    ))
 }
 fn children(nodes: &[Node]) -> anyhow::Result<Value> {
     Ok(Value::Array(

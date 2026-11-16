@@ -18,10 +18,12 @@ blink
 ```
 
 On Linux, building the display-information dependency requires an XCB development
-library (for example `libxcb1-dev` on Debian/Ubuntu or `libxcb` on Arch), plus a C
-compiler and `pkg-config`. Desktop/display information is optional at runtime;
+library (for example `libxcb1-dev` on Debian/Ubuntu or `libxcb` on Arch),
+GLib/GIO development files (`libglib2.0-dev` on Debian/Ubuntu or `glib2` on Arch),
+plus a C compiler and `pkg-config`. Desktop/display information is optional at runtime;
 headless systems still work. Sixel encoding is pure Rust and needs no libsixel.
-The bundled astronaut is embedded in the executable, including installed builds.
+All 30 bundled images are embedded in the executable, including installed builds.
+Original artwork is preserved; the image collection adds about 84 MiB to the binary.
 
 Linux is the primary tested platform. Collectors use portable libraries and
 fallbacks for macOS and Windows, but those platforms have not been runtime-tested
@@ -50,6 +52,7 @@ blink --print-config > blink-config.toml
 | `--no-color` | Disable styling escapes and use text image placeholders |
 | `--plain` | Print readable titles and aligned text rows, without dashboard geometry |
 | `--print-config` | Print concise, editable TOML, preserving custom settings and CLI overrides |
+| `--list-images` | List bundled image names, descriptions, and OS defaults |
 | `--list-themes` | List built-in theme names |
 | `--list-modules` | List module presets and all system component names |
 | `--check-config` | Validate configuration, colors, and configured visible assets |
@@ -66,9 +69,12 @@ control sequence.
 The platform configuration directory contains `blink/config.toml`
 (`~/.config/blink/config.toml` on Linux). Normal first launch creates a compact, editable
 config with `create_new`, never overwriting an existing file. Listing, printing,
-and checking do not create files or collect system information.
+and checking do not create files or collect the system metric snapshot. Asset
+checking resolves automatic artwork for the current OS.
 
-The generated default is 23 lines. It exposes the settings most people edit:
+The generated default is 34 lines and includes all 29 entries from Fastfetch
+2.71's default structure, plus Blink's hostname and core-count rows. Unavailable
+information is hidden by default. The main settings look like this:
 
 ```toml
 theme = "gruvbox-material"
@@ -78,14 +84,18 @@ background = "transparent"
 direction = "horizontal"
 
 [layout.first]
-image = "builtin"
+image = "auto"
 size = "35%"
 
 [layout.second]
-swatches = true
+responsive = true
+header = ["title", "separator"]
+footer = ["break", "colors"]
 modules = [
-    { title = "System", components = ["os", "hostname", "kernel", "uptime", "shell"] },
-    { title = "Hardware", components = ["cpu", "cpu_cores", "memory"] },
+    { title = "System", components = ["os", "host", "hostname", "kernel", "uptime", "packages", "shell", "locale"] },
+    { title = "Session", components = ["display", "desktop", "window_manager", "wm_theme", "desktop_theme", "icon_theme", "font", "cursor", "terminal", "terminal_font"] },
+    { title = "Hardware", components = ["cpu", "cpu_cores", "gpu", "memory", "swap"] },
+    { title = "Storage & Power", components = ["disk", "local_ip", "battery", "power_adapter"] },
 ]
 ```
 
@@ -181,6 +191,7 @@ top/bottom for a vertical split. Either can contain any supported node:
 | `module` | Optional `title`, `title_align`, `direction`, and `children` or `preset` |
 | `component` | Dynamic `name` or static `value`, optional `label`, `icon`, `icon_path` |
 | `text` | Literal multiline `content` |
+| `ascii` | Inline `content` or a UTF-8 art file `path` |
 | `image` | Optional `path` and `image` fitting options |
 | `swatches` | Compact colors from the current palette |
 
@@ -210,12 +221,21 @@ allocated in configuration order, bounded to available space after gaps; fill
 children divide the remainder. Auto measures content, borders, and padding.
 Borders and padding consume space *inside* the assigned rectangle.
 
-Nodes accept `visible = false`. `optional = true` permits small-terminal trimming:
-images are omitted below 64 columns or 20 available rows; swatches below 64
-columns or 24 available rows; optional components below 40 columns or 14 available
-rows. The default presets mark host, uptime, shell, and core-count rows optional.
-Custom layouts never automatically switch orientation; overflow clips safely.
-Removing an image section lets the other section consume the full available area.
+Nodes accept `visible = false`. With `responsive = true` on a column section,
+modules pack into one to three columns, each at least 28 cells wide. Header and
+footer components span the section. Modules go into the shortest column, with
+configuration order breaking ties. If the dashboard is too tall, it removes
+optional artwork, then palette/decorations, appearance details, and lower-priority
+rows. OS, CPU, and memory stay longest; extremely small rectangles still clip.
+Plain output keeps every available requested metric regardless of terminal size.
+Use `responsive = false` to keep a fixed stack.
+
+Existing explicit module/children layouts remain fixed unless they opt in.
+In fixed layouts, `optional = true` permits the existing small-terminal trimming:
+images below 64 columns or 20 available rows; swatches below 64 columns or 24 rows;
+optional components below 40 columns or 14 rows. Presets mark hostname, uptime,
+shell, and core-count rows optional. Overflow clips safely. Removing an image
+section lets the other section consume the full available area.
 
 `reserved_rows` defaults to two; at least one row is always left for the returning
 prompt. Match this setting to your shell prompt, whose height cannot reliably be
@@ -279,26 +299,39 @@ left = 2
 
 ## Components and icons
 
-Available component names:
+Default data components:
 
-`os`, `distribution`, `hostname`, `kernel`, `architecture`, `uptime`, `shell`,
-`terminal`, `cpu`, `cpu_usage`, `cpu_cores`, `memory`, `total_ram`, `used_ram`,
-`memory_percentage`, `gpu`, `disk`, `battery`, `desktop`, `window_manager`,
-`display`, and `datetime`.
+`os`, `host`, `hostname`, `kernel`, `uptime`, `packages`, `shell`, `display`,
+`desktop`, `window_manager`, `wm_theme`, `desktop_theme`, `icon_theme`, `font`,
+`cursor`, `terminal`, `terminal_font`, `cpu`, `cpu_cores`, `gpu`, `memory`, `swap`,
+`disk`, `local_ip`, `battery`, `power_adapter`, and `locale`.
+
+Additional data components: `distribution`, `architecture`, `cpu_usage`,
+`total_ram`, `used_ram`, `memory_percentage`, and `datetime`. Presentation
+components are `title` (`user@host`), `separator` (title display width), `break`,
+and `colors` (16 ANSI colors; omitted from plain/no-color output). The existing
+`swatches` node renders theme colors independently.
+
+Names are case-insensitive. Fastfetch aliases `DE`, `WM`, `WMTheme`, `Theme`,
+`Icons`, `TerminalFont`, `LocalIp`, and `PowerAdapter` are accepted and normalized.
+`desktop_theme` reports the desktop's appearance; top-level `theme` chooses
+Blink's own palette. [Component coverage and native sources](docs/components.md)
+describe detection limits, including supported package databases and terminal fonts.
 
 Collection is driven by visible requested components, with one shared snapshot.
 CPU usage takes two samples at sysinfo's minimum interval and is absent from the
 default dashboard. Other components do not incur that delay. Memory/storage use
-binary units; percentages require a valid nonzero total. Disk output lists mount
-capacity and used space; batteries include charge percentage and charging state.
-Missing information displays `N/A`; `[display] unavailable = "hide"` omits it.
+binary units; percentages require a valid nonzero total. Zero swap is reported as
+`Not configured (0 B)`. Local IP lists operational, non-loopback IPv4/IPv6 interfaces
+and makes no external network requests. Power adapters report connection state and
+measured watts only when available; measured draw is not charger rated capacity.
 
-Shell detection prefers a recognized Linux parent shell, then `SHELL`/`COMSPEC`.
-Terminal/desktop names come from session environment data. Window manager names
-are shown only with explicit session evidence. Remote/headless sessions and some
-Wayland compositors may not expose physical display information. GPU availability
-depends on the drivers and APIs supported by sysinfo. No collector launches a
-shell command to manufacture a value.
+Unavailable information is hidden. Set `[display] unavailable = "show"` to display
+`N/A` instead. Shell detection prefers a recognized Linux parent shell, then
+`SHELL`/`COMSPEC`. Desktop/window-manager evidence comes from session data.
+Remote/headless sessions and some Wayland compositors may not expose physical
+displays. GPU availability depends on sysinfo's drivers/APIs. No collector launches
+a shell command, and Fastfetch is not required to run Blink.
 
 Unicode symbols are the default; font detection is not reliable. Select
 `[icons] mode = "ascii"` for safe glyphs or `"nerd"` when you have a Nerd Font.
@@ -309,11 +342,72 @@ are replaced by normal component text in plain output.
 
 ## Images and terminal support
 
-Image paths expand `~` and resolve relative to the configuration directory.
-Omit `path` to use the embedded astronaut. PNG, JPEG, WebP, and GIF (first frame)
-are supported. Assets are decoded once per invocation. Input and decode limits
-bound memory use. Missing/corrupt images warn once on stderr and use a placeholder;
-`--check-config` treats them as validation errors.
+The default `image = "auto"` selects variant 1 for the current OS/distribution.
+Unknown distributions and unsupported systems use `blink-1`; parent-distribution
+artwork is not inferred. `builtin` and an omitted image source also mean automatic
+selection. Omarchy uses `omarchy-1`, including older Arch-based installations
+with identifiable Omarchy runtime files. Variants `omarchy-2` and `omarchy-3`
+are selectable too. Any bundled image can be selected on any OS:
+
+```toml
+[layout.first]
+image = "linuxmint-2"  # also accepts "linuxmint-2.png"
+```
+
+Run `blink --list-images` for the complete catalog. The [artwork guide](docs/artwork.md)
+includes descriptions and the original-to-new filename mapping. The astronaut is
+now `arch-2`, because its shoulder patch carries the Arch logo. Original bare
+filenames remain accepted as catalog aliases.
+
+Custom image paths expand `~` and resolve relative to the configuration directory:
+
+```toml
+[layout.first]
+image = "~/Pictures/my-logo.png"
+```
+
+Recognized bare names select bundled assets. Include a directory or `./` to select
+a custom file with the same name: `image = "./arch-1.png"`. PNG, JPEG, WebP, and
+GIF (first frame) are supported. Selected assets are decoded once per invocation.
+Input/decode limits bound memory use. Missing/corrupt images warn once on stderr
+and use a placeholder; `--check-config` treats them as validation errors.
+
+ASCII art uses the same layout, alignment, clipping, and text styles:
+
+```toml
+[layout.first]
+ascii = "~/art/logo.txt"
+# Alternatively: ascii = { text = "..." }
+```
+
+For multiline inline art, use a TOML literal string:
+
+```toml
+[layout.first]
+ascii = { text = '''
+  /\_/\
+ ( o.o )
+  > ^ <
+''' }
+
+[layout.first.style]
+align_h = "center"
+align_v = "center"
+
+[layout.first.text_style]
+foreground = "@accent"
+```
+
+Choose one source per node. Detailed ASCII nodes use `type = "ascii"` and either
+`path` or `content`. Files must be UTF-8 and at most 1 MiB. Spaces and blank lines
+are retained, CRLF is normalized, tabs use eight-cell stops, and terminal escape
+sequences are removed; apply colors through Blink styles instead. ASCII stays in
+plain output and with `--no-image`. Mark it `optional = true` to permit removal
+when a responsive dashboard needs the space. Missing/invalid files warn once and
+show `[art unavailable]`; `--check-config` reports an error. Built-in ASCII logos
+and raster-to-ASCII conversion are not implemented.
+
+Raster fitting applies to image nodes:
 
 ```toml
 [layout.first.image]
@@ -350,6 +444,7 @@ policy or the default multiplexer safety policy.
 - [Horizontal dashboard](examples/default.toml)
 - [Vertical image and modules](examples/vertical.toml)
 - [Minimal text-only display](examples/minimal.toml)
+- [Custom inline ASCII artwork](examples/ascii.toml)
 - [Compact small-terminal display](examples/compact.toml)
 - [Rich bordered dashboard](examples/dashboard.toml)
 
