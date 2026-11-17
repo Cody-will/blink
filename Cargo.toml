@@ -2,6 +2,10 @@
 name = "blink"
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
+description = "A configurable, print-once terminal system dashboard"
+repository = "https://github.com/Cody-will/blink"
+readme = "README.md"
 
 [dependencies]
 anyhow = "1.0.104"

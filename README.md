@@ -588,12 +588,15 @@ commit `Cargo.lock`. Use a matching tag such as `v0.1.0` for that version.
    SHA-256 checksums alongside the archives and include tested-platform details,
    installation steps, changes, configuration compatibility notes, and known
    limitations in the release notes.
-6. Review licensing before distribution: this repository currently has no
-   `LICENSE` file or Cargo license declaration. Choose the intended code license
-   and document the bundled artwork's licensing/attribution separately as needed.
-7. Push the release commit and matching tag, then create the GitHub release and
-   attach the tested archives and checksums. There is currently no automated
-   release workflow in this repository; pushing a tag alone does not build assets.
+6. Include the MIT license and artwork notice, and review packaged
+   dependency notices. See [release instructions](docs/releases.md).
+7. Push the release commit and matching tag. The **Build release artifacts** workflow
+   checks and packages Linux x86_64 on Ubuntu 24.04, then uploads an Actions artifact.
+   Download it and create the GitHub release manually; the workflow never publishes.
+
+The workflow can also be started manually from GitHub Actions. Locally, run
+`python3 scripts/package-release.py` after building to produce the archive and
+checksum in `dist/`. Packaging requires finalized `LICENSE` and `ARTWORK-LICENSE.md`.
 
 For this update, release notes should highlight OS-selected bundled artwork
 (including Omarchy), custom ASCII art, compact configuration, responsive modules,
@@ -608,3 +611,13 @@ account for about 84 MiB; the tested Linux release binary is about 92 MiB.
 - [Component coverage and native detection limits](docs/components.md)
 - [Architecture, validation, and performance](docs/implementation.md)
 - [Example configurations](examples)
+
+## License
+
+Blink is licensed under the [MIT License](LICENSE), copyright © 2026 Cody-will
+and contributors. MIT permits reuse, modification, and redistribution while
+requiring preservation of the copyright and license notice.
+
+Bundled artwork was generated using ChatGPT. See [the artwork notice](ARTWORK-LICENSE.md)
+for its terms and the treatment of third-party OS logos and trademarks.
+Dependencies retain their own licenses; release archives include collected notices.
