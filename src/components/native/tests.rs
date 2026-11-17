@@ -5,6 +5,7 @@ struct Fixture {
     base: PathBuf,
     pub s: Sources,
 }
+
 impl Fixture {
     fn new() -> Self {
         let base = std::env::temp_dir().join(format!(
@@ -27,22 +28,27 @@ impl Fixture {
             },
         }
     }
+
     fn write(&self, path: &Path, text: &str) {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, text).unwrap();
     }
+
     fn root(&self, path: &str, text: &str) {
         self.write(&self.s.path(path), text);
     }
+
     fn config(&self, path: &str, text: &str) {
         self.write(&self.s.config.join(path), text);
     }
 }
+
 impl Drop for Fixture {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.base);
     }
 }
+
 #[test]
 fn host_reads_product_and_rejects_firmware_placeholders() {
     let f = Fixture::new();
@@ -58,9 +64,11 @@ fn host_reads_product_and_rejects_firmware_placeholders() {
     f.root("sys/firmware/devicetree/base/model", "Test Board\0");
     assert_eq!(super::host(&f.s).unwrap().model, "Test Board");
 }
+
 fn host_or_none(s: &Sources) -> bool {
     super::host(s).is_none()
 }
+
 #[test]
 fn adapters_report_connection_and_measured_power_without_guessing() {
     let f = Fixture::new();
@@ -81,6 +89,7 @@ fn adapters_report_connection_and_measured_power_without_guessing() {
     assert!(!a[1].online);
     assert_eq!(a[1].watts, None);
 }
+
 #[test]
 fn package_databases_count_installed_entries_and_exclude_removed_packages() {
     let f = Fixture::new();
@@ -115,6 +124,7 @@ fn package_databases_count_installed_entries_and_exclude_removed_packages() {
     assert_eq!(counts["flatpak"], 3);
     assert_eq!(counts["snap"], 1);
 }
+
 #[test]
 fn rpm_sqlite_is_read_only_and_prefers_real_package_signatures() {
     let f = Fixture::new();
@@ -128,6 +138,7 @@ fn rpm_sqlite_is_read_only_and_prefers_real_package_signatures() {
     assert_eq!(counts, vec![("rpm".into(), 2)]);
     assert_eq!(before, std::fs::read(path).unwrap());
 }
+
 #[test]
 fn malformed_missing_and_unreadable_databases_are_not_zero_counts() {
     let f = Fixture::new();
@@ -142,14 +153,17 @@ fn malformed_missing_and_unreadable_databases_are_not_zero_counts() {
             Err(std::io::ErrorKind::PermissionDenied.into())
         }
     }
+
     impl std::io::BufRead for Unreadable {
         fn fill_buf(&mut self) -> std::io::Result<&[u8]> {
             Err(std::io::ErrorKind::PermissionDenied.into())
         }
+
         fn consume(&mut self, _: usize) {}
     }
     assert_eq!(packages::dpkg(Unreadable), None);
 }
+
 #[test]
 fn custom_pacman_database_path_is_respected() {
     let f = Fixture::new();
@@ -157,6 +171,7 @@ fn custom_pacman_database_path_is_respected() {
     f.root("custom/db/local/example/desc", "%NAME%");
     assert_eq!(packages::collect(&f.s).unwrap(), vec![("pacman".into(), 1)]);
 }
+
 #[test]
 fn gtk_settings_read_colors_icons_fonts_and_cursor_size() {
     let f = Fixture::new();
@@ -167,6 +182,7 @@ fn gtk_settings_read_colors_icons_fonts_and_cursor_size() {
     assert_eq!(data["icon_theme"], "Test Icons");
     assert_eq!(data["cursor"], "Test Cursor (24)");
 }
+
 #[test]
 fn kde_settings_require_a_kde_session_and_never_replace_blink_theme() {
     let mut f = Fixture::new();
@@ -182,6 +198,7 @@ fn kde_settings_require_a_kde_session_and_never_replace_blink_theme() {
     assert_eq!(data["wm_theme"], "Decoration");
     assert_eq!(data["font"], "Noto Sans (10)");
 }
+
 #[test]
 fn xfce_and_openbox_use_native_xml_only_for_matching_sessions() {
     let mut f = Fixture::new();
@@ -202,15 +219,18 @@ fn xfce_and_openbox_use_native_xml_only_for_matching_sessions() {
         .insert("XDG_CURRENT_DESKTOP".into(), "Openbox".into());
     assert_eq!(appearance::files(&f.s)["wm_theme"], "Openbox Theme");
 }
+
 #[test]
 fn terminal_fonts_detect_supported_native_configs_and_do_not_guess_others() {
     let mut f = Fixture::new();
+
     #[cfg(target_os = "linux")]
     {
         f.root("proc/self/status", "Name:\tblink\nPPid:\t42\n");
         f.root("proc/42/status", "Name:\tgnome-terminal-\nPPid:\t1\n");
         assert_eq!(f.s.terminal().as_deref(), Some("gnome-terminal-"));
     }
+
     for (terminal, path, text, expected) in [
         (
             "kitty",
@@ -253,6 +273,7 @@ fn terminal_fonts_detect_supported_native_configs_and_do_not_guess_others() {
     f.config("kitty/kitty.conf", "include kitty.conf\n");
     assert!(appearance::terminal_font(&f.s).is_none());
 }
+
 #[test]
 fn konsole_font_profile_uses_qt_font_fields() {
     let mut f = Fixture::new();
@@ -270,6 +291,7 @@ fn konsole_font_profile_uses_qt_font_fields() {
         Some("Test Mono (11)")
     );
 }
+
 #[test]
 fn local_interface_filter_excludes_loopback_and_link_local() {
     for ip in [
@@ -282,10 +304,12 @@ fn local_interface_filter_excludes_loopback_and_link_local() {
     ] {
         assert!(!usable_address(ip.parse().unwrap()));
     }
+
     for ip in ["192.168.1.2", "10.0.0.2", "2001:db8::1"] {
         assert!(usable_address(ip.parse().unwrap()));
     }
 }
+
 #[test]
 fn locale_precedence_ignores_empty_overrides() {
     let mut f = Fixture::new();

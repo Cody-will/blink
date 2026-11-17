@@ -1,5 +1,6 @@
 pub mod native;
 pub mod system;
+
 use crate::config::IconMode;
 
 pub struct Definition {
@@ -9,35 +10,66 @@ pub struct Definition {
     pub nerd: &'static str,
     pub ascii: &'static str,
 }
+
 macro_rules! metrics {
-    ($(($name:literal,$label:literal,$u:literal,$n:literal,$a:literal)),* $(,)?) => {
-        pub const DEFINITIONS:&[Definition]=&[$(Definition{name:$name,label:$label,unicode:$u,nerd:$n,ascii:$a}),*];
+    ($(($name:literal, $label:literal, $u:literal, $n:literal, $a:literal)),* $(,)?) => {
+        pub const DEFINITIONS: &[Definition] = &[
+            $(Definition {
+                name: $name,
+                label: $label,
+                unicode: $u,
+                nerd: $n,
+                ascii: $a,
+            }),*
+        ];
     }
 }
+
 metrics! {
-    ("os","OS","◈","󰣇","O"),("distribution","Distribution","◈","󰌽","D"),
-    ("hostname","Hostname","⌂","󰟀","H"),("kernel","Kernel","◇","󰌽","K"),
-    ("architecture","Architecture","▦","󰘚","A"),("uptime","Uptime","◷","󰥔","U"),
-    ("shell","Shell","❯","󰆍",">"),("terminal","Terminal","▣","󰆍","T"),
-    ("cpu","CPU","◆","󰍛","C"),("cpu_usage","CPU usage","◆","󰍛","%"),
-    ("cpu_cores","CPU cores","▦","󰍛","#"),("memory","Memory","▤","󰘚","M"),
-    ("total_ram","Total RAM","▤","󰘚","M"),("used_ram","Used RAM","▤","󰘚","M"),
-    ("memory_percentage","Memory usage","▤","󰘚","%"),("gpu","GPU","▧","󰢮","G"),
-    ("disk","Disk","▰","󰋊","D"),("battery","Battery","▱","󰁹","B"),
-    ("desktop","Desktop","▣","󰇄","E"),("window_manager","Window manager","▣","󰖯","W"),
-    ("display","Display","▭","󰍹","R"),("datetime","Date & time","◷","󰥔","@"),
-    ("host","Host","⌂","󰟀","H"),("packages","Packages","▣","󰏖","P"),
-    ("swap","Swap","▤","󰘚","S"),("local_ip","Local IP","↔","󰈀","N"),
-    ("power_adapter","Power adapter","ϟ","󰚥","P"),("locale","Locale","◎","󰗊","L"),
-    ("wm_theme","WM theme","◇","󰖯","W"),("desktop_theme","Theme","◈","󰏘","T"),
-    ("icon_theme","Icon theme","◈","󰀻","I"),("font","Font","Aa","󰛖","F"),
-    ("cursor","Cursor","↖","󰇀","C"),("terminal_font","Terminal font","Aa","󰛖","F"),
-    ("title","Title","","",""),("separator","Separator","","",""),
-    ("break","Break","","",""),("colors","Colors","","",""),
+    ("os", "OS", "◈", "󰣇", "O"),
+    ("distribution", "Distribution", "◈", "󰌽", "D"),
+    ("hostname", "Hostname", "⌂", "󰟀", "H"),
+    ("kernel", "Kernel", "◇", "󰌽", "K"),
+    ("architecture", "Architecture", "▦", "󰘚", "A"),
+    ("uptime", "Uptime", "◷", "󰥔", "U"),
+    ("shell", "Shell", "❯", "󰆍", ">"),
+    ("terminal", "Terminal", "▣", "󰆍", "T"),
+    ("cpu", "CPU", "◆", "󰍛", "C"),
+    ("cpu_usage", "CPU usage", "◆", "󰍛", "%"),
+    ("cpu_cores", "CPU cores", "▦", "󰍛", "#"),
+    ("memory", "Memory", "▤", "󰘚", "M"),
+    ("total_ram", "Total RAM", "▤", "󰘚", "M"),
+    ("used_ram", "Used RAM", "▤", "󰘚", "M"),
+    ("memory_percentage", "Memory usage", "▤", "󰘚", "%"),
+    ("gpu", "GPU", "▧", "󰢮", "G"),
+    ("disk", "Disk", "▰", "󰋊", "D"),
+    ("battery", "Battery", "▱", "󰁹", "B"),
+    ("desktop", "Desktop", "▣", "󰇄", "E"),
+    ("window_manager", "Window manager", "▣", "󰖯", "W"),
+    ("display", "Display", "▭", "󰍹", "R"),
+    ("datetime", "Date & time", "◷", "󰥔", "@"),
+    ("host", "Host", "⌂", "󰟀", "H"),
+    ("packages", "Packages", "▣", "󰏖", "P"),
+    ("swap", "Swap", "▤", "󰘚", "S"),
+    ("local_ip", "Local IP", "↔", "󰈀", "N"),
+    ("power_adapter", "Power adapter", "ϟ", "󰚥", "P"),
+    ("locale", "Locale", "◎", "󰗊", "L"),
+    ("wm_theme", "WM theme", "◇", "󰖯", "W"),
+    ("desktop_theme", "Theme", "◈", "󰏘", "T"),
+    ("icon_theme", "Icon theme", "◈", "󰀻", "I"),
+    ("font", "Font", "Aa", "󰛖", "F"),
+    ("cursor", "Cursor", "↖", "󰇀", "C"),
+    ("terminal_font", "Terminal font", "Aa", "󰛖", "F"),
+    ("title", "Title", "", "", ""),
+    ("separator", "Separator", "", "", ""),
+    ("break", "Break", "", "", ""),
+    ("colors", "Colors", "", "", ""),
 }
+
 pub fn definition(name: &str) -> Option<&'static Definition> {
     DEFINITIONS.iter().find(|d| d.name == name)
 }
+
 pub fn icon(name: &str, mode: IconMode) -> &'static str {
     if name == "network" {
         return match mode {
@@ -46,6 +78,7 @@ pub fn icon(name: &str, mode: IconMode) -> &'static str {
             IconMode::Ascii => "N",
         };
     }
+
     let name = if name == "clock" { "datetime" } else { name };
     definition(name)
         .map(|d| match mode {
@@ -55,9 +88,11 @@ pub fn icon(name: &str, mode: IconMode) -> &'static str {
         })
         .unwrap_or("")
 }
+
 pub const SYSTEM: &[&str] = &[
     "os", "host", "hostname", "kernel", "uptime", "packages", "shell", "locale",
 ];
+
 pub const SESSION: &[&str] = &[
     "display",
     "desktop",
@@ -70,6 +105,7 @@ pub const SESSION: &[&str] = &[
     "terminal",
     "terminal_font",
 ];
+
 pub const HARDWARE: &[&str] = &["cpu", "cpu_cores", "gpu", "memory", "swap"];
 pub const STORAGE: &[&str] = &["disk", "local_ip", "battery", "power_adapter"];
 pub const PRESETS: &[&str] = &["system", "hardware", "storage", "session"];
@@ -82,6 +118,7 @@ pub fn preset(name: &str) -> Option<(&'static str, &'static [&'static str])> {
         _ => None,
     }
 }
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Presentation {
     Data,
@@ -90,6 +127,7 @@ pub enum Presentation {
     Break,
     Colors,
 }
+
 impl Definition {
     pub fn presentation(&self) -> Presentation {
         match self.name {
@@ -100,6 +138,7 @@ impl Definition {
             _ => Presentation::Data,
         }
     }
+
     pub fn priority(&self) -> u8 {
         match self.name {
             "os" | "cpu" | "memory" => 100,
@@ -112,6 +151,7 @@ impl Definition {
         }
     }
 }
+
 pub fn canonical(name: &str) -> Option<&'static str> {
     if let Some(d) = DEFINITIONS
         .iter()

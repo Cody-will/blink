@@ -22,6 +22,7 @@ impl Resolved {
                     h = n;
                 }
             }
+
             if self.direction == Direction::Horizontal {
                 cw = cw.saturating_add(w);
                 ch = ch.max(h);
@@ -30,6 +31,7 @@ impl Resolved {
                 ch = ch.saturating_add(h);
             }
         }
+
         let gaps = self
             .gap
             .saturating_mul(self.children.len().saturating_sub(1).min(u16::MAX as usize) as u16);
@@ -38,6 +40,7 @@ impl Resolved {
         } else {
             ch = ch.saturating_add(gaps);
         }
+
         if let Some(image) = &self.image {
             cw = cw.max(self.image_columns);
             ch = ch.max(

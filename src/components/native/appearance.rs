@@ -4,6 +4,7 @@ use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
 };
+
 pub const KEYS: &[&str] = &[
     "wm_theme",
     "desktop_theme",
@@ -12,6 +13,7 @@ pub const KEYS: &[&str] = &[
     "cursor",
     "terminal_font",
 ];
+
 pub type Settings = BTreeMap<String, String>;
 pub fn ini(text: &str) -> BTreeMap<(String, String), String> {
     let mut group = String::new();
@@ -20,6 +22,7 @@ pub fn ini(text: &str) -> BTreeMap<(String, String), String> {
         if line.starts_with('#') || line.starts_with(';') {
             continue;
         }
+
         if line.starts_with('[') && line.ends_with(']') {
             group = line[1..line.len() - 1].to_owned();
         } else if let Some((key, value)) = line.split_once('=') {
@@ -31,19 +34,23 @@ pub fn ini(text: &str) -> BTreeMap<(String, String), String> {
     }
     result
 }
+
 fn value(map: &BTreeMap<(String, String), String>, group: &str, key: &str) -> Option<String> {
     map.get(&(group.into(), key.into())).cloned()
 }
+
 fn put(out: &mut Settings, key: &str, value: Option<String>) {
     if let Some(value) = value.filter(|s| !s.trim().is_empty()) {
         out.insert(key.into(), value);
     }
 }
+
 pub fn collect(s: &Sources, keys: &std::collections::BTreeSet<String>) -> Settings {
     let desktop = keys
         .iter()
         .any(|k| KEYS[..KEYS.len() - 1].contains(&k.as_str()));
     let mut out = if desktop { files(s) } else { Settings::new() };
+
     #[cfg(target_os = "linux")]
     if desktop
         && s.env("XDG_CURRENT_DESKTOP")
@@ -53,11 +60,13 @@ pub fn collect(s: &Sources, keys: &std::collections::BTreeSet<String>) -> Settin
             out.insert(key, value);
         }
     }
+
     if keys.contains("terminal_font") {
         put(&mut out, "terminal_font", terminal_font(s));
     }
     out
 }
+
 pub fn files(s: &Sources) -> Settings {
     let mut out = Settings::new();
     let session = s
@@ -89,6 +98,7 @@ pub fn files(s: &Sources) -> Settings {
         let Some(text) = s.read(&path) else {
             continue;
         };
+
         let data = ini(&text);
         let get = |key: &str| value(&data, "Settings", key).or_else(|| value(&data, "", key));
         if let Some(theme) = get("gtk-theme-name")
@@ -96,6 +106,7 @@ pub fn files(s: &Sources) -> Settings {
         {
             themes.push(format!("{theme} [GTK]"));
         }
+
         for (key, setting) in [
             ("icon_theme", "gtk-icon-theme-name"),
             ("font", "gtk-font-name"),
@@ -104,6 +115,7 @@ pub fn files(s: &Sources) -> Settings {
                 put(&mut out, key, get(setting));
             }
         }
+
         if !out.contains_key("cursor") {
             put(
                 &mut out,
@@ -113,9 +125,11 @@ pub fn files(s: &Sources) -> Settings {
             );
         }
     }
+
     if !themes.is_empty() {
         out.insert("desktop_theme".into(), themes.join(", "));
     }
+
     if is_kde && let Some(text) = s.read(&s.config.join("kcminputrc")) {
         let data = ini(&text);
         put(
@@ -125,6 +139,7 @@ pub fn files(s: &Sources) -> Settings {
                 .map(|name| with_size(name, value(&data, "Mouse", "cursorSize"))),
         );
     }
+
     if is_kde && let Some(text) = s.read(&s.config.join("kwinrc")) {
         let data = ini(&text);
         put(
@@ -133,6 +148,7 @@ pub fn files(s: &Sources) -> Settings {
             value(&data, "org.kde.kdecoration2", "theme"),
         );
     }
+
     for (path, mapping) in [
         (
             "xfce4/xfconf/xfce-perchannel-xml/xsettings.xml",
@@ -164,6 +180,7 @@ pub fn files(s: &Sources) -> Settings {
             }
         }
     }
+
     if (session.contains("openbox")
         || s.env("XDG_SESSION_WM")
             .is_some_and(|s| s.eq_ignore_ascii_case("openbox")))
@@ -182,12 +199,14 @@ pub fn files(s: &Sources) -> Settings {
     }
     out
 }
+
 fn with_size(name: String, size: Option<String>) -> String {
     match size {
         Some(size) => format!("{name} ({size})"),
         None => name,
     }
 }
+
 fn qt_font(font: &str) -> String {
     let mut fields = font.split(',');
     let family = fields.next().unwrap_or(font);
@@ -199,10 +218,12 @@ fn qt_font(font: &str) -> String {
             .map(str::to_owned),
     )
 }
+
 fn font_file(s: &Sources, path: &Path, depth: usize) -> Option<Settings> {
     if depth > 8 {
         return None;
     }
+
     let text = s.read(path)?;
     let mut result = Settings::new();
     for line in text
@@ -222,6 +243,7 @@ fn font_file(s: &Sources, path: &Path, depth: usize) -> Option<Settings> {
     }
     Some(result)
 }
+
 fn expand(s: &Sources, path: &str, base: &Path) -> PathBuf {
     if let Some(path) = path.strip_prefix("~/") {
         s.home.join(path)
@@ -229,10 +251,12 @@ fn expand(s: &Sources, path: &str, base: &Path) -> PathBuf {
         base.join(path)
     }
 }
+
 fn alacritty(s: &Sources, path: &Path, depth: usize) -> Option<toml::Value> {
     if depth > 8 {
         return None;
     }
+
     let text = s.read(path)?;
     let main: toml::Value = toml::from_str(&text).ok()?;
     let mut merged = toml::Value::Table(toml::Table::new());
@@ -252,6 +276,7 @@ fn alacritty(s: &Sources, path: &Path, depth: usize) -> Option<toml::Value> {
     crate::config::merge(&mut merged, main);
     Some(merged)
 }
+
 pub fn terminal_font(s: &Sources) -> Option<String> {
     let terminal = s.terminal()?;
     if terminal.contains("kitty") {
@@ -265,6 +290,7 @@ pub fn terminal_font(s: &Sources) -> Option<String> {
             .get("font_family")
             .map(|name| with_size(name.clone(), font.get("font_size").cloned()));
     }
+
     if terminal.contains("alacritty") {
         let value = alacritty(s, &s.config.join("alacritty/alacritty.toml"), 0)?;
         let font = value.get("font")?;
@@ -274,6 +300,7 @@ pub fn terminal_font(s: &Sources) -> Option<String> {
             font.get("size").map(ToString::to_string),
         ));
     }
+
     if terminal.contains("ghostty") {
         let text = s.read(&s.config.join("ghostty/config"))?;
         if text
@@ -282,18 +309,22 @@ pub fn terminal_font(s: &Sources) -> Option<String> {
         {
             return None;
         }
+
         let settings = ini(&text);
         return value(&settings, "", "font-family")
             .map(|name| with_size(name, value(&settings, "", "font-size")));
     }
+
     if terminal == "foot" || terminal == "footclient" {
         let text = s.read(&s.config.join("foot/foot.ini"))?;
         let data = ini(&text);
         if data.keys().any(|(_, key)| key == "include") {
             return None;
         }
+
         return value(&data, "main", "font");
     }
+
     if terminal.contains("konsole") {
         let profile = s
             .env("KONSOLE_PROFILE_NAME")
@@ -306,6 +337,7 @@ pub fn terminal_font(s: &Sources) -> Option<String> {
             s.home.join(".local/share/konsole").join(&profile),
             s.path("usr/share/konsole").join(profile),
         ];
+
         for path in paths {
             if let Some(text) = s.read(&path)
                 && let Some(font) = value(&ini(&text), "Appearance", "Font")
@@ -314,12 +346,14 @@ pub fn terminal_font(s: &Sources) -> Option<String> {
             }
         }
     }
+
     #[cfg(target_os = "linux")]
     if terminal.contains("gnome-terminal") {
         return gnome_terminal_font();
     }
     None
 }
+
 #[cfg(target_os = "linux")]
 fn setting(schema: &str, path: Option<&str>) -> Option<(gio::Settings, gio::SettingsSchema)> {
     let schema = gio::SettingsSchemaSource::default()?.lookup(schema, true)?;
@@ -331,6 +365,7 @@ fn setting(schema: &str, path: Option<&str>) -> Option<(gio::Settings, gio::Sett
         schema,
     ))
 }
+
 #[cfg(target_os = "linux")]
 fn get(schema: &str, key: &str, path: Option<&str>) -> Option<String> {
     use gio::prelude::SettingsExt;
@@ -338,10 +373,12 @@ fn get(schema: &str, key: &str, path: Option<&str>) -> Option<String> {
     if !schema.has_key(key) {
         return None;
     }
+
     let value = settings.value(key);
     let value = value.get::<String>()?;
     (!value.is_empty()).then_some(value)
 }
+
 #[cfg(target_os = "linux")]
 fn gnome() -> Settings {
     use gio::prelude::SettingsExt;
@@ -357,6 +394,7 @@ fn gnome() -> Settings {
                 put(&mut out, key, settings.value(name).get::<String>());
             }
         }
+
         if schema.has_key("cursor-size")
             && settings.int("cursor-size") > 0
             && let Some(name) = out.get("cursor").cloned()
@@ -375,6 +413,7 @@ fn gnome() -> Settings {
     );
     out
 }
+
 #[cfg(target_os = "linux")]
 fn gnome_terminal_font() -> Option<String> {
     use gio::prelude::SettingsExt;
@@ -383,6 +422,7 @@ fn gnome_terminal_font() -> Option<String> {
     if !id.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-') {
         return None;
     }
+
     let path = format!("/org/gnome/terminal/legacy/profiles:/:{id}/");
     let (settings, schema) = setting("org.gnome.Terminal.Legacy.Profile", Some(&path))?;
     if schema.has_key("use-system-font") && settings.boolean("use-system-font") {

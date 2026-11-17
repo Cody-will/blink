@@ -7,15 +7,81 @@ TOML; there is no event loop, alternate screen, or background service.
 Dashboard output clears the visible terminal screen before drawing. Plain and
 redirected output never clear the screen.
 
+![Blink dashboard with Omarchy artwork, transparent background, and bordered system modules](screenshots/2026-11-16-210529_hyprshot.png)
+
+[Installation](#build-and-install) · [Configuration](#configuration-and-defaults) ·
+[Built-in OS artwork](#built-in-os-artwork) · [Screenshots](#screenshots) ·
+[Release preparation](#preparing-a-release)
+
+## Features
+
+- Print once and exit, with space reserved for your shell prompt.
+- Horizontal or vertical splits, nested containers, aligned components, and responsive module columns.
+- Compact TOML configuration with defaults, seven themes, transparent backgrounds, borders, and independent styles.
+- System, session, hardware, storage, and power information; unavailable values hide gracefully.
+- 30 bundled images with OS-based defaults, custom image paths, and inline or file-based ASCII art.
+- Kitty, iTerm2, Sixel, ANSI, and text image backends, plus clean redirected/plain output.
+
+## Screenshots
+
+These examples show custom configurations on a transparent terminal. Background
+wallpaper and blur come from the terminal/compositor; Blink's background is transparent.
+Click any screenshot to view it at full resolution.
+
+| Responsive module columns | Stacked modules |
+| --- | --- |
+| ![Blink airship beside modules arranged in columns](screenshots/2026-11-16-205817_hyprshot.png) | ![Blink airship beside vertically stacked modules](screenshots/2026-11-16-210040_hyprshot.png) |
+
+<details>
+<summary>Configuration and artwork examples</summary>
+
+| Blink submarine | Automatic Arch artwork |
+| --- | --- |
+| ![TOML configuration beside Blink submarine artwork](screenshots/2026-11-16-210345_hyprshot.png) | ![TOML configuration beside Arch observatory artwork](screenshots/2026-11-16-210406_hyprshot.png) |
+
+| Arch astronaut | Omarchy artwork |
+| --- | --- |
+| ![Selecting the Arch astronaut in TOML](screenshots/2026-11-16-210430_hyprshot.png) | ![Selecting Omarchy artwork in TOML](screenshots/2026-11-16-210512_hyprshot.png) |
+
+</details>
+
 ## Build and install
 
 Use a current stable Rust toolchain supporting edition 2024 and let chains.
 
 ```sh
-cargo build --release
+git clone https://github.com/Cody-will/blink.git
+cd blink
+cargo build --release --locked
 cargo install --path . --locked
 blink
 ```
+
+Cargo installs the executable in `~/.cargo/bin`; make sure that directory is on
+your `PATH`. To try it without installing, use `cargo run --release --locked`.
+
+### Release downloads
+
+See [GitHub Releases](https://github.com/Cody-will/blink/releases) for published
+versions and their available assets. Use a binary only if the release provides
+one for your OS and CPU architecture; GitHub's automatic source archives must be
+built using Cargo. Each release should state its tested platforms and runtime
+library requirements.
+
+For a Linux release archive containing `blink`, extract it, verify its checksum
+against the release's checksum file when supplied, then install the executable:
+
+```sh
+mkdir -p ~/.local/bin
+install -m 755 ./blink ~/.local/bin/blink
+~/.local/bin/blink --version
+~/.local/bin/blink
+```
+
+Add `~/.local/bin` to `PATH` if needed. Updating replaces the executable and keeps
+your configuration; new default component lists do not overwrite existing files.
+All artwork is embedded, so an installed binary needs no adjacent `assets/` folder.
+
 
 On Linux, building the display-information dependency requires an XCB development
 library (for example `libxcb1-dev` on Debian/Ubuntu or `libxcb` on Arch),
@@ -340,6 +406,39 @@ Raster files use `icon_path = "icons/cpu.png"`; arbitrary paths are never printe
 as glyphs. SVG icons are not supported. Raster icons share the image backend and
 are replaced by normal component text in plain output.
 
+## Built-in OS artwork
+
+There are 30 bundled images. With `image = "auto"`, Blink chooses variant 1 for
+the detected OS/distribution. Every image can also be selected manually on any OS.
+This list describes **artwork coverage**, not build or runtime certification;
+Linux is the primary tested platform.
+
+| OS / distribution | Image names |
+| --- | --- |
+| Alpine Linux | `alpine-1` |
+| Arch Linux | `arch-1`, `arch-2` |
+| Debian | `debian-1`, `debian-2` |
+| EndeavourOS | `endeavouros-1` |
+| Fedora | `fedora-1` |
+| FreeBSD | `freebsd-1` |
+| Kali Linux | `kali-1` |
+| Linux Mint | `linuxmint-1`, `linuxmint-2` |
+| macOS | `macos-1` |
+| Manjaro | `manjaro-1` |
+| NixOS | `nixos-1` |
+| Omarchy | `omarchy-1`, `omarchy-2`, `omarchy-3` |
+| OpenBSD | `openbsd-1` |
+| openSUSE, Leap, and Tumbleweed | `opensuse-1`, `opensuse-2` |
+| Pop!_OS | `popos-1` |
+| Ubuntu | `ubuntu-1` |
+| Windows | `windows-1`, `windows-2` |
+
+Also available: generic Linux Tux (`linux-1`), Blink artwork (`blink-1` through
+`blink-4`), and decorative firefly artwork (`firefly-1`). Unmatched systems use
+`blink-1`. Older Omarchy installations that identify as Arch are recognized by
+installed Omarchy runtime files. Use `blink --list-images` for descriptions or
+see the [artwork catalog](docs/artwork.md) for previews and filename mappings.
+
 ## Images and terminal support
 
 The default `image = "auto"` selects variant 1 for the current OS/distribution.
@@ -466,3 +565,46 @@ cargo build --release
 
 See [the implementation and validation report](docs/implementation.md) for
 architecture, tests, performance measurements, and remaining validation work.
+
+## Preparing a release
+
+The package currently declares version `0.1.0` in `Cargo.toml`. Before tagging a
+release, choose the release version, update that field if needed, and refresh and
+commit `Cargo.lock`. Use a matching tag such as `v0.1.0` for that version.
+
+1. Run the development checks above and `cargo build --release --locked` from the
+   commit you intend to release. Validate the examples with `--check-config`.
+2. Test the release executable outside the repository: check `--version`,
+   `--list-images`, first-launch config generation, plain output, OS artwork,
+   horizontal/vertical layouts, small terminals, and preservation of existing configs.
+   Test native graphics in the terminal emulators you intend to advertise.
+3. Include the new screenshots and every referenced image in the commit. The
+   image catalog embeds files at build time; missing files will prevent a build.
+4. Build and test each OS/architecture you plan to distribute. Label archives
+   with the version and Rust target triple. For Linux binaries, record the build
+   distribution, glibc requirement, and shared-library dependencies (`ldd` on
+   your own release binary); do not assume the executable is fully static.
+5. Package the executable with the README and relevant documentation. Publish
+   SHA-256 checksums alongside the archives and include tested-platform details,
+   installation steps, changes, configuration compatibility notes, and known
+   limitations in the release notes.
+6. Review licensing before distribution: this repository currently has no
+   `LICENSE` file or Cargo license declaration. Choose the intended code license
+   and document the bundled artwork's licensing/attribution separately as needed.
+7. Push the release commit and matching tag, then create the GitHub release and
+   attach the tested archives and checksums. There is currently no automated
+   release workflow in this repository; pushing a tag alone does not build assets.
+
+For this update, release notes should highlight OS-selected bundled artwork
+(including Omarchy), custom ASCII art, compact configuration, responsive modules,
+and the expanded system components. Mention that `image = "builtin"` now selects
+OS artwork automatically; users who want the previous astronaut can set
+`image = "arch-2"`. Existing configurations remain intact. The embedded originals
+account for about 84 MiB; the tested Linux release binary is about 92 MiB.
+
+## Project documentation
+
+- [Artwork names, previews, and compatibility](docs/artwork.md)
+- [Component coverage and native detection limits](docs/components.md)
+- [Architecture, validation, and performance](docs/implementation.md)
+- [Example configurations](examples)

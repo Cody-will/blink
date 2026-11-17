@@ -1,16 +1,19 @@
 //! Terminal facts and bounded capability detection. Redirected output never probes.
 use crate::config::{Backend, Display};
+
 #[derive(Debug, Clone, Copy)]
 pub struct CellPixels {
     pub width: u16,
     pub height: u16,
 }
+
 #[derive(Debug, Clone, Copy)]
 pub struct Terminal {
     pub width: u16,
     pub height: u16,
     pub cell: CellPixels,
 }
+
 impl Terminal {
     pub fn detect(display: &Display) -> Self {
         if let Ok(size) = crossterm::terminal::window_size()
@@ -34,6 +37,7 @@ impl Terminal {
                 },
             };
         }
+
         let (width, height) = crossterm::terminal::size().unwrap_or((80, 24));
         Self {
             width,
@@ -45,12 +49,14 @@ impl Terminal {
         }
     }
 }
+
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Capabilities {
     pub kitty: bool,
     pub iterm2: bool,
     pub sixel: bool,
 }
+
 impl Capabilities {
     pub fn features(&mut self, features: &str) {
         let mut token = String::new();
@@ -70,14 +76,17 @@ impl Capabilities {
             token.push(c);
         }
     }
+
     pub fn replies(&mut self, bytes: &[u8]) {
         let reply = String::from_utf8_lossy(bytes);
         if reply.contains("\x1b_Gi=314159;OK\x1b\\") {
             self.kitty = true;
         }
+
         if let Some(start) = reply.find("Capabilities=") {
             self.features(&reply[start + "Capabilities=".len()..]);
         }
+
         for part in reply.split("\x1b[?").skip(1) {
             if let Some(end) = part.find('c') {
                 let params = &part[..end];
@@ -87,6 +96,7 @@ impl Capabilities {
             }
         }
     }
+
     pub fn select(self) -> Backend {
         if self.kitty {
             Backend::Kitty
@@ -99,6 +109,7 @@ impl Capabilities {
         }
     }
 }
+
 pub fn backend(
     request: Backend,
     terminal: bool,
@@ -109,24 +120,30 @@ pub fn backend(
     if !terminal || !color {
         return Ok(Backend::Text);
     }
+
     if !has_images {
         return Ok(Backend::Text);
     }
+
     if matches!(request, Backend::Text | Backend::Ansi) {
         return Ok(request);
     }
+
     let screen = std::env::var_os("STY").is_some();
     let mux = std::env::var_os("TMUX").is_some() || screen;
     if screen || mux && !display.multiplexer_passthrough {
         return Ok(Backend::Ansi);
     }
+
     if request != Backend::Auto {
         return Ok(request);
     }
+
     let mut caps = Capabilities::default();
     if let Ok(features) = std::env::var("TERM_FEATURES") {
         caps.features(&features);
     }
+
     if display.probe && display.probe_timeout_ms > 0 && !mux {
         #[cfg(unix)]
         match probe(display.probe_timeout_ms) {
@@ -137,6 +154,7 @@ pub fn backend(
     }
     Ok(caps.select())
 }
+
 #[cfg(unix)]
 fn probe(timeout: u16) -> std::io::Result<Vec<u8>> {
     use rustix::{
@@ -152,11 +170,13 @@ fn probe(timeout: u16) -> std::io::Result<Vec<u8>> {
         },
         time::{Duration, Instant},
     };
+
     struct Restore {
         file: File,
         original: Termios,
         signals: Vec<signal_hook::SigId>,
     }
+
     impl Drop for Restore {
         fn drop(&mut self) {
             let _ = tcsetattr(&self.file, OptionalActions::Now, &self.original);
@@ -165,10 +185,12 @@ fn probe(timeout: u16) -> std::io::Result<Vec<u8>> {
             }
         }
     }
+
     let mut file = OpenOptions::new().read(true).write(true).open("/dev/tty")?;
     if rustix::io::ioctl_fionread(&file)? > 0 {
         return Ok(vec![]);
     }
+
     let original = tcgetattr(&file)?;
     let interrupted = Arc::new(AtomicBool::new(false));
     let mut restore = Restore {
@@ -176,6 +198,7 @@ fn probe(timeout: u16) -> std::io::Result<Vec<u8>> {
         original: original.clone(),
         signals: vec![],
     };
+
     for signal in [
         signal_hook::consts::SIGINT,
         signal_hook::consts::SIGTERM,
@@ -185,6 +208,7 @@ fn probe(timeout: u16) -> std::io::Result<Vec<u8>> {
             .signals
             .push(signal_hook::flag::register(signal, interrupted.clone())?);
     }
+
     let mut raw = original;
     raw.make_raw();
     tcsetattr(&file, OptionalActions::Now, &raw)?;
@@ -200,12 +224,14 @@ fn probe(timeout: u16) -> std::io::Result<Vec<u8>> {
         if interrupted.load(Ordering::Relaxed) {
             return Err(std::io::ErrorKind::Interrupted.into());
         }
+
         match file.read(&mut buf) {
             Ok(n) if n > 0 => bytes.extend_from_slice(&buf[..n]),
             Ok(_) => {}
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
             Err(e) => return Err(e),
         }
+
         if bytes.ends_with(b"c") {
             break;
         }

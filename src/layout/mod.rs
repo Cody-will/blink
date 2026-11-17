@@ -3,6 +3,7 @@ pub mod node;
 pub mod rect;
 
 use serde::{Deserialize, Serialize};
+
 #[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, clap::ValueEnum)]
 #[serde(rename_all = "snake_case")]
 pub enum Direction {

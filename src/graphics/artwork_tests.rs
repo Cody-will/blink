@@ -15,6 +15,7 @@ use std::{
     rc::Rc,
     sync::atomic::{AtomicU64, Ordering},
 };
+
 static NEXT: AtomicU64 = AtomicU64::new(0);
 struct Fixture(PathBuf);
 impl Fixture {
@@ -27,15 +28,18 @@ impl Fixture {
         std::fs::create_dir_all(&base).unwrap();
         Self(base)
     }
+
     fn write(&self, name: &str, bytes: &[u8]) {
         std::fs::write(self.0.join(name), bytes).unwrap();
     }
 }
+
 impl Drop for Fixture {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.0);
     }
 }
+
 fn resolve(text: &str, base: &Path, assets: &mut Assets) -> content::Resolved {
     content::resolve(
         &Config::parse(text).unwrap(),
@@ -45,6 +49,7 @@ fn resolve(text: &str, base: &Path, assets: &mut Assets) -> content::Resolved {
     )
     .unwrap()
 }
+
 #[test]
 fn catalog_matches_manifest_and_every_original_image_decodes() {
     let manifest: serde_json::Value =
@@ -79,6 +84,7 @@ fn catalog_matches_manifest_and_every_original_image_decodes() {
         assert!(assets.warnings.is_empty());
     }
 }
+
 #[test]
 fn exact_os_matches_choose_variant_one_and_unknown_systems_use_blink() {
     for art in catalog::ARTWORK
@@ -89,6 +95,7 @@ fn exact_os_matches_choose_variant_one_and_unknown_systems_use_blink() {
         assert_eq!(catalog::for_os(os).id, art.id);
         assert_eq!(catalog::for_os(&os.to_uppercase()).id, art.id);
     }
+
     for (os, expected) in [
         ("pop", "popos-1"),
         ("pop!_os", "popos-1"),
@@ -99,6 +106,7 @@ fn exact_os_matches_choose_variant_one_and_unknown_systems_use_blink() {
     ] {
         assert_eq!(catalog::for_os(os).id, expected);
     }
+
     for os in [
         "",
         "linux",
@@ -109,6 +117,7 @@ fn exact_os_matches_choose_variant_one_and_unknown_systems_use_blink() {
     ] {
         assert_eq!(catalog::for_os(os).id, "blink-1");
     }
+
     let mut assets = Assets::default();
     let auto = assets.load(None, Path::new(".")).unwrap();
     for selector in ["auto", "builtin"] {
@@ -117,6 +126,7 @@ fn exact_os_matches_choose_variant_one_and_unknown_systems_use_blink() {
             &assets.load(Some(selector), Path::new(".")).unwrap()
         ));
     }
+
     let selected = catalog::automatic();
     assert!(Rc::ptr_eq(
         &auto,
@@ -124,6 +134,7 @@ fn exact_os_matches_choose_variant_one_and_unknown_systems_use_blink() {
     ));
     assert_eq!(assets.decoded_count(), 1);
 }
+
 #[test]
 fn explicit_file_paths_override_catalog_names_and_custom_formats_still_load() {
     let f = Fixture::new();
@@ -148,6 +159,7 @@ fn explicit_file_paths_override_catalog_names_and_custom_formats_still_load() {
     assert!(assets.load(Some("nonexistent-1"), &f.0).is_none());
     assert_eq!(assets.warnings.len(), 1);
 }
+
 #[test]
 fn image_and_ascii_configuration_exports_losslessly_and_rejects_conflicts() {
     for source in [
@@ -172,6 +184,7 @@ fn image_and_ascii_configuration_exports_losslessly_and_rejects_conflicts() {
             "{source}"
         );
     }
+
     for source in [
         "ascii='art.txt'\nimage='auto'",
         "ascii='art.txt'\npath='other.txt'",
@@ -187,10 +200,12 @@ fn image_and_ascii_configuration_exports_losslessly_and_rejects_conflicts() {
             "{source}"
         );
     }
+
     let defaults = Config::default().editable_toml().unwrap();
     assert!(defaults.contains("image = \"auto\""));
     assert!(defaults.lines().count() < 50);
 }
+
 #[test]
 fn ascii_preserves_art_whitespace_and_expands_tabs_after_sanitizing_controls() {
     assert_eq!(
@@ -201,6 +216,7 @@ fn ascii_preserves_art_whitespace_and_expands_tabs_after_sanitizing_controls() {
     assert_eq!(ascii("👨‍👩‍👧‍👦\tX"), "👨‍👩‍👧‍👦      X");
     assert_eq!(ascii("\x1b]0;title\x07ART"), "ART");
 }
+
 #[test]
 fn ascii_files_cache_and_invalid_sources_warn_once_without_panicking() {
     let f = Fixture::new();
@@ -226,6 +242,7 @@ fn ascii_files_cache_and_invalid_sources_warn_once_without_panicking() {
     assert!(render::plain(&resolve(cfg, &f.0, &mut assets)).contains("[art unavailable]"));
     assert_eq!(assets.warnings.len(), 3);
 }
+
 #[test]
 fn ascii_layout_styles_and_plain_output_preserve_content_at_small_sizes() {
     let text = "[layout.first]\nascii={text='''  界  \n\nEND  \n'''}\n[layout.first.style]\nalign_h='center'\nalign_v='end'\n[layout.first.text_style]\nforeground='#123456'\n[layout.second]\nchildren=[]";
@@ -252,6 +269,7 @@ fn ascii_layout_styles_and_plain_output_preserve_content_at_small_sizes() {
         },
         passthrough: false,
     };
+
     for (w, h) in [(20, 10), (3, 2), (1, 1), (0, 0)] {
         let out = render::compose(&root.place(Rect::new(0, 0, w, h)), &options).unwrap();
         use unicode_width::UnicodeWidthStr;
@@ -262,6 +280,7 @@ fn ascii_layout_styles_and_plain_output_preserve_content_at_small_sizes() {
         }
     }
 }
+
 #[test]
 fn optional_ascii_sections_are_removed_to_make_responsive_modules_fit() {
     let cfg =

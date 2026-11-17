@@ -5,6 +5,7 @@ use crate::{
     layout::{Direction, Size, node::Kind, rect::Rect},
     styles::ContainerStyleConfig,
 };
+
 fn group(children: Vec<Resolved>, role: Role) -> Resolved {
     let mut group = Resolved::empty(ContainerStyleConfig::plain());
     group.size = Size::Auto;
@@ -12,6 +13,7 @@ fn group(children: Vec<Resolved>, role: Role) -> Resolved {
     group.role = role;
     group
 }
+
 fn candidate(section: &Resolved, columns: usize) -> Resolved {
     let mut result = section.clone();
     result.responsive = false;
@@ -31,6 +33,7 @@ fn candidate(section: &Resolved, columns: usize) -> Resolved {
     if !headers.is_empty() {
         result.children.push(group(headers, Role::Header));
     }
+
     let mut lanes = (0..columns)
         .map(|_| {
             let mut lane = group(vec![], Role::Body);
@@ -51,6 +54,7 @@ fn candidate(section: &Resolved, columns: usize) -> Resolved {
         if !lanes[index].children.is_empty() {
             heights[index] += u32::from(section.gap);
         }
+
         let height = match child.size {
             Size::Fixed(n) => n,
             _ => child.measure().1,
@@ -66,11 +70,13 @@ fn candidate(section: &Resolved, columns: usize) -> Resolved {
         // All lanes use the same available height; explicit child sizes are retained.
         result.children.push(grid);
     }
+
     if !footers.is_empty() {
         result.children.push(group(footers, Role::Footer));
     }
     result
 }
+
 fn packing(section: &Resolved, area: Rect) -> (Resolved, bool) {
     let inner = area.inner(&section.container);
     let count = usize::from(
@@ -84,6 +90,7 @@ fn packing(section: &Resolved, area: Rect) -> (Resolved, bool) {
         if height <= area.height {
             return (result, true);
         }
+
         if best.as_ref().is_none_or(|(_, old)| height < *old) {
             best = Some((result, height));
         }
@@ -93,21 +100,25 @@ fn packing(section: &Resolved, area: Rect) -> (Resolved, bool) {
         false,
     )
 }
+
 fn fits(node: &Resolved, area: Rect) -> bool {
     if node.responsive {
         return packing(node, area).1;
     }
+
     let placed = node.place(area);
     node.children
         .iter()
         .zip(&placed.children)
         .all(|(child, p)| fits(child, p.area))
 }
+
 fn has_artwork(node: &Resolved) -> bool {
     matches!(node.kind, Kind::Image | Kind::Ascii)
         || node.image.is_some()
         || node.children.iter().any(has_artwork)
 }
+
 fn priority(node: &Resolved) -> Option<u8> {
     node.component_name
         .as_deref()
@@ -115,6 +126,7 @@ fn priority(node: &Resolved) -> Option<u8> {
         .map(|d| d.priority())
         .filter(|p| *p < 100)
 }
+
 fn lowest(node: &Resolved) -> Option<usize> {
     fn visit(n: &Resolved, index: &mut usize, best: &mut Option<(u8, usize)>, active: bool) {
         let active = active || n.responsive;
@@ -126,14 +138,17 @@ fn lowest(node: &Resolved) -> Option<usize> {
         {
             *best = Some((p, current));
         }
+
         for child in &n.children {
             visit(child, index, best, active);
         }
     }
+
     let mut best = None;
     visit(node, &mut 0, &mut best, false);
     best.map(|(_, i)| i)
 }
+
 fn remove(node: &mut Resolved, target: usize, index: &mut usize, active: bool) {
     let active = active || node.responsive;
     *index += 1;
@@ -152,10 +167,12 @@ fn remove(node: &mut Resolved, target: usize, index: &mut usize, active: bool) {
         });
     }
 }
+
 fn apply(node: &mut Resolved, area: Rect) {
     if node.responsive {
         *node = packing(node, area).0;
     }
+
     let areas = node
         .place(area)
         .children
@@ -166,6 +183,7 @@ fn apply(node: &mut Resolved, area: Rect) {
         apply(child, area);
     }
 }
+
 pub fn adapt(root: &mut Resolved, area: Rect, color: bool) {
     fn hide_colors(n: &mut Resolved) {
         n.children.retain(|c| !c.swatches);
@@ -173,9 +191,11 @@ pub fn adapt(root: &mut Resolved, area: Rect, color: bool) {
             hide_colors(child);
         }
     }
+
     if !color {
         hide_colors(root);
     }
+
     if !fits(root, area) {
         root.children
             .retain(|child| !(child.optional && has_artwork(child)));
@@ -183,6 +203,7 @@ pub fn adapt(root: &mut Resolved, area: Rect, color: bool) {
             root.children[0].size = Size::Fill;
         }
     }
+
     while !fits(root, area) {
         let Some(target) = lowest(root) else {
             break;

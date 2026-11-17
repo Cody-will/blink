@@ -11,6 +11,7 @@ fn difference(value: &Value, default: &Value) -> Option<Value> {
     if value == default {
         return None;
     }
+
     match (value, default) {
         (Value::Table(table), Value::Table(default)) => {
             let result = table
@@ -28,11 +29,13 @@ fn difference(value: &Value, default: &Value) -> Option<Value> {
         _ => Some(value.clone()),
     }
 }
+
 fn component_default(name: &str) -> Node {
     let mut node = super::module("", &[name]).children.remove(0);
     node.kind = Kind::Component;
     node
 }
+
 fn size(size: Size) -> Value {
     match size {
         Size::Auto => Value::String("auto".into()),
@@ -41,6 +44,7 @@ fn size(size: Size) -> Value {
         Size::Percent(n) => Value::String(format!("{n}%")),
     }
 }
+
 fn node(n: &Node, base: &Node, component: bool, module: bool) -> anyhow::Result<Value> {
     let fallback = Node::default();
     let base = if n.kind == base.kind { base } else { &fallback };
@@ -67,6 +71,7 @@ fn node(n: &Node, base: &Node, component: bool, module: bool) -> anyhow::Result<
     } else {
         table.insert("type".into(), Value::try_from(n.kind)?);
     }
+
     match n.kind {
         Kind::Image => {
             if !matches!(n.path.as_deref(), Some("builtin" | "auto"))
@@ -112,12 +117,14 @@ fn node(n: &Node, base: &Node, component: bool, module: bool) -> anyhow::Result<
             } else {
                 &n.children
             };
+
             let default_swatch = Node {
                 kind: Kind::Swatches,
                 size: Size::Auto,
                 optional: true,
                 ..Default::default()
             };
+
             let simple_swatch = swatch.map(Value::try_from).transpose()?
                 == swatch
                     .map(|_| Value::try_from(&default_swatch))
@@ -161,11 +168,13 @@ fn node(n: &Node, base: &Node, component: bool, module: bool) -> anyhow::Result<
         }
         _ => {}
     }
+
     for (key, nodes) in [("header", &n.header), ("footer", &n.footer)] {
         if !nodes.is_empty() {
             table.insert(key.into(), component_values(nodes)?);
         }
     }
+
     if n.responsive {
         table.insert("responsive".into(), Value::Boolean(true));
     }
@@ -173,6 +182,7 @@ fn node(n: &Node, base: &Node, component: bool, module: bool) -> anyhow::Result<
     if n.kind != Kind::Image && n.image != crate::layout::node::ImageOptions::default() {
         table.insert("image".into(), Value::try_from(&n.image)?);
     }
+
     if let Some(align) = n.align_h.filter(|h| Some(*h) == n.align_v) {
         table.remove("align_h");
         table.remove("align_v");
@@ -180,6 +190,7 @@ fn node(n: &Node, base: &Node, component: bool, module: bool) -> anyhow::Result<
     }
     Ok(Value::Table(table))
 }
+
 fn component_values(nodes: &[Node]) -> anyhow::Result<Value> {
     Ok(Value::Array(
         nodes
@@ -195,6 +206,7 @@ fn component_values(nodes: &[Node]) -> anyhow::Result<Value> {
             .collect::<anyhow::Result<_>>()?,
     ))
 }
+
 fn children(nodes: &[Node]) -> anyhow::Result<Value> {
     Ok(Value::Array(
         nodes
@@ -203,6 +215,7 @@ fn children(nodes: &[Node]) -> anyhow::Result<Value> {
             .collect::<anyhow::Result<_>>()?,
     ))
 }
+
 pub fn export(cfg: &Config) -> anyhow::Result<String> {
     let defaults = Config::default();
     let mut root = difference(&Value::try_from(cfg)?, &Value::try_from(&defaults)?)
@@ -226,10 +239,12 @@ pub fn export(cfg: &Config) -> anyhow::Result<String> {
                 styles.remove("window");
             }
         }
+
         if styles.is_empty() {
             root.remove("styles");
         }
     }
+
     let layout = Table::from_iter([
         ("direction".into(), Value::try_from(cfg.layout.direction)?),
         ("gap".into(), Value::Integer(i64::from(cfg.layout.gap))),

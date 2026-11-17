@@ -80,6 +80,7 @@ impl Rect {
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
 
     #[test]
@@ -105,8 +106,10 @@ mod tests {
 
 #[cfg(test)]
 mod inset_tests {
+
     use super::*;
     use crate::styles::Padding;
+
     #[test]
     fn inner_subtracts_border_and_padding() {
         let style = ContainerStyleConfig {

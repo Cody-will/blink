@@ -2,6 +2,7 @@ mod compatibility;
 mod document;
 mod shorthand;
 pub mod theme;
+
 use crate::{
     components,
     layout::{
@@ -33,6 +34,7 @@ pub struct Config {
     pub layout: Layout,
     pub styles: Styles,
 }
+
 #[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, clap::ValueEnum)]
 #[serde(rename_all = "snake_case")]
 pub enum Backend {
@@ -44,6 +46,7 @@ pub enum Backend {
     Ansi,
     Text,
 }
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Display {
@@ -54,6 +57,7 @@ pub struct Display {
     pub cell_height: u16,
     pub multiplexer_passthrough: bool,
 }
+
 impl Default for Display {
     fn default() -> Self {
         Self {
@@ -66,6 +70,7 @@ impl Default for Display {
         }
     }
 }
+
 #[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum Unavailable {
@@ -73,12 +78,14 @@ pub enum Unavailable {
     Show,
     Hide,
 }
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Icons {
     pub enabled: bool,
     pub mode: IconMode,
 }
+
 impl Default for Icons {
     fn default() -> Self {
         Self {
@@ -87,6 +94,7 @@ impl Default for Icons {
         }
     }
 }
+
 #[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum IconMode {
@@ -95,6 +103,7 @@ pub enum IconMode {
     Nerd,
     Ascii,
 }
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Layout {
@@ -103,6 +112,7 @@ pub struct Layout {
     pub first: Node,
     pub second: Node,
 }
+
 impl Default for Layout {
     fn default() -> Self {
         Self {
@@ -130,6 +140,7 @@ impl Default for Layout {
         }
     }
 }
+
 fn presentation(names: &[&str]) -> Vec<Node> {
     names
         .iter()
@@ -141,6 +152,7 @@ fn presentation(names: &[&str]) -> Vec<Node> {
         })
         .collect()
 }
+
 pub fn module(title: &str, names: &[&str]) -> Node {
     Node {
         kind: Kind::Module,
@@ -159,6 +171,7 @@ pub fn module(title: &str, names: &[&str]) -> Node {
         ..Default::default()
     }
 }
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Styles {
@@ -171,6 +184,7 @@ pub struct Styles {
     pub label: TextStyleConfig,
     pub icon: TextStyleConfig,
 }
+
 impl Default for Styles {
     fn default() -> Self {
         Self {
@@ -207,6 +221,7 @@ impl Default for Styles {
         }
     }
 }
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -223,6 +238,7 @@ impl Default for Config {
         }
     }
 }
+
 /// Tables merge recursively; lists and changed node types replace their defaults.
 pub fn merge(base: &mut toml::Value, overrides: toml::Value) {
     if base.get("type").is_some()
@@ -232,6 +248,7 @@ pub fn merge(base: &mut toml::Value, overrides: toml::Value) {
         *base = overrides;
         return;
     }
+
     match (base, overrides) {
         (toml::Value::Table(base), toml::Value::Table(values)) => {
             for (key, value) in values {
@@ -245,6 +262,7 @@ pub fn merge(base: &mut toml::Value, overrides: toml::Value) {
         (base, value) => *base = value,
     }
 }
+
 pub fn override_style<T: Serialize + serde::de::DeserializeOwned>(
     base: &T,
     overrides: &toml::Table,
@@ -253,6 +271,7 @@ pub fn override_style<T: Serialize + serde::de::DeserializeOwned>(
     merge(&mut value, toml::Value::Table(overrides.clone()));
     value.try_into().context("Invalid style override")
 }
+
 impl Config {
     pub fn parse(text: &str) -> anyhow::Result<Self> {
         let mut value: toml::Value = toml::from_str(text).context("Invalid TOML")?;
@@ -265,6 +284,7 @@ impl Config {
         cfg.validate()?;
         Ok(cfg)
     }
+
     pub fn path(path: Option<&Path>) -> PathBuf {
         path.map(Path::to_path_buf).unwrap_or_else(|| {
             dirs::config_dir()
@@ -272,6 +292,7 @@ impl Config {
                 .join("blink/config.toml")
         })
     }
+
     pub fn load(path: Option<&Path>, create: bool) -> anyhow::Result<(Self, PathBuf)> {
         let explicit = path.is_some();
         let path = Self::path(path);
@@ -283,6 +304,7 @@ impl Config {
                 if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
                     fs::create_dir_all(parent)?;
                 }
+
                 let cfg = Self::default();
                 let contents = cfg.editable_toml()?;
                 fs::OpenOptions::new()
@@ -299,9 +321,11 @@ impl Config {
         };
         Ok((cfg, path))
     }
+
     pub fn editable_toml(&self) -> anyhow::Result<String> {
         document::export(self)
     }
+
     pub fn colors(&self) -> anyhow::Result<Palette> {
         let mut value = toml::Value::try_from(Palette::theme(&self.theme)?)?;
         merge(&mut value, toml::Value::Table(self.palette.clone()));
@@ -314,6 +338,7 @@ impl Config {
         }
         Ok(palette)
     }
+
     fn expand_presets(&mut self) -> anyhow::Result<()> {
         fn expand(n: &mut Node) -> anyhow::Result<()> {
             if n.kind == Kind::Component
@@ -321,10 +346,12 @@ impl Config {
             {
                 n.name = name.into();
             }
+
             if let Some(preset) = n.preset.take() {
                 if n.kind != Kind::Module || !n.children.is_empty() {
                     bail!("Module preset requires a module without explicit children");
                 }
+
                 let (title, keys) = components::preset(&preset)
                     .with_context(|| format!("Unknown module preset {preset:?}"))?;
                 n.children = module(title, keys).children;
@@ -332,6 +359,7 @@ impl Config {
                     n.title = title.into();
                 }
             }
+
             for c in n
                 .header
                 .iter_mut()
@@ -345,18 +373,22 @@ impl Config {
         expand(&mut self.layout.first)?;
         expand(&mut self.layout.second)
     }
+
     pub fn validate(&self) -> anyhow::Result<()> {
         if self.version != 1 {
             bail!("Unsupported configuration version {}", self.version);
         }
+
         if !(1..=256).contains(&self.display.cell_width)
             || !(1..=256).contains(&self.display.cell_height)
         {
             bail!("Terminal cell dimensions must be between 1 and 256");
         }
+
         if self.display.probe_timeout_ms > 1000 {
             bail!("probe_timeout_ms must be at most 1000");
         }
+
         let p = self.colors()?;
         for (name, s) in [
             ("window", &self.styles.window),
@@ -366,6 +398,7 @@ impl Config {
         ] {
             s.colors(&p).with_context(|| format!("styles.{name}"))?;
         }
+
         for (name, s) in [
             ("text", &self.styles.text),
             ("title", &self.styles.title),
@@ -374,6 +407,7 @@ impl Config {
         ] {
             s.colors(&p).with_context(|| format!("styles.{name}"))?;
         }
+
         fn check(
             n: &Node,
             cfg: &Config,
@@ -384,31 +418,38 @@ impl Config {
             if depth > 64 || n.children.len() > 4096 {
                 bail!("{path}: excessive layout depth or children");
             }
+
             if let Size::Percent(v) = n.size
                 && v > 100
             {
                 bail!("{path}.size: percentage must be 0–100");
             }
+
             if n.kind == Kind::Component
                 && n.value.is_none()
                 && components::definition(&n.name).is_none()
             {
                 bail!("{path}.name: unknown component {:?}", n.name);
             }
+
             if n.kind == Kind::Ascii && n.image != crate::layout::node::ImageOptions::default() {
                 bail!("{path}: ASCII art does not use raster image fitting options");
             }
+
             if n.kind == Kind::Ascii && n.path.is_some() && !n.content.is_empty() {
                 bail!("{path}: ASCII art accepts a file path or inline content, not both");
             }
+
             if n.responsive && n.kind != Kind::Column {
                 bail!("{path}: responsive requires a column container");
             }
+
             if !matches!(n.kind, Kind::Row | Kind::Column | Kind::Module)
                 && (!n.children.is_empty() || !n.header.is_empty() || !n.footer.is_empty())
             {
                 bail!("{path}: leaf nodes cannot contain children");
             }
+
             let base = match n.kind {
                 Kind::Module => cfg.styles.module.clone(),
                 Kind::Component => cfg.styles.component.clone(),
@@ -426,6 +467,7 @@ impl Config {
                     .colors(p)
                     .with_context(|| format!("{path}.{name}"))?;
             }
+
             for (i, c) in n
                 .header
                 .iter()

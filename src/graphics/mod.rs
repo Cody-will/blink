@@ -1,5 +1,6 @@
 pub mod assets;
 pub mod catalog;
+
 use crate::{
     config::Backend,
     layout::{
@@ -20,6 +21,7 @@ pub struct Prepared {
     pub image: DynamicImage,
     pub area: Rect,
 }
+
 pub fn prepare(
     image: &DynamicImage,
     area: Rect,
@@ -29,11 +31,13 @@ pub fn prepare(
     if area.width == 0 || area.height == 0 {
         return None;
     }
+
     let pw = u32::from(area.width) * u32::from(cell.width);
     let ph = u32::from(area.height) * u32::from(cell.height);
     if u64::from(pw) * u64::from(ph) > 32 * 1024 * 1024 {
         return None;
     }
+
     let sx = f64::from(pw) / f64::from(image.width());
     let sy = f64::from(ph) / f64::from(image.height());
     let mut rect = area;
@@ -97,6 +101,7 @@ pub fn prepare(
         area: rect,
     })
 }
+
 pub fn flatten(image: &DynamicImage, background: [u8; 3]) -> DynamicImage {
     let mut pixels = image.to_rgba8();
     for p in pixels.pixels_mut() {
@@ -108,6 +113,7 @@ pub fn flatten(image: &DynamicImage, background: [u8; 3]) -> DynamicImage {
     }
     DynamicImage::ImageRgba8(pixels)
 }
+
 pub fn rgb(color: &str) -> [u8; 3] {
     if let Some(hex) = color.strip_prefix('#') {
         let hex = if hex.len() == 3 {
@@ -115,10 +121,12 @@ pub fn rgb(color: &str) -> [u8; 3] {
         } else {
             hex.into()
         };
+
         if let Ok(value) = u32::from_str_radix(&hex, 16) {
             return [(value >> 16) as u8, (value >> 8) as u8, value as u8];
         }
     }
+
     if let Ok(index) = color.parse::<u8>() {
         let basic = [
             [0, 0, 0],
@@ -138,21 +146,26 @@ pub fn rgb(color: &str) -> [u8; 3] {
             [0, 255, 255],
             [255, 255, 255],
         ];
+
         if index < 16 {
             return basic[usize::from(index)];
         }
+
         if index >= 232 {
             return [8 + (index - 232) * 10; 3];
         }
+
         let n = index - 16;
         let c = |n: u8| if n == 0 { 0 } else { 55 + n * 40 };
         return [c(n / 36), c(n / 6 % 6), c(n % 6)];
     }
     [0, 0, 0]
 }
+
 pub trait ImageRenderer {
     fn render(&self, image: &Prepared, output: &mut dyn Write) -> anyhow::Result<()>;
 }
+
 pub struct Kitty;
 pub struct Iterm2;
 pub struct Sixel;
@@ -182,6 +195,7 @@ impl ImageRenderer for Kitty {
         Ok(())
     }
 }
+
 impl ImageRenderer for Iterm2 {
     fn render(&self, p: &Prepared, output: &mut dyn Write) -> anyhow::Result<()> {
         let mut png = std::io::Cursor::new(Vec::new());
@@ -197,6 +211,7 @@ impl ImageRenderer for Iterm2 {
         Ok(())
     }
 }
+
 impl ImageRenderer for Sixel {
     fn render(&self, p: &Prepared, output: &mut dyn Write) -> anyhow::Result<()> {
         let rgba = p.image.to_rgba8();
@@ -212,6 +227,7 @@ impl ImageRenderer for Sixel {
         Ok(())
     }
 }
+
 pub fn native(
     backend: Backend,
     p: &Prepared,
@@ -238,6 +254,7 @@ pub fn native(
         )?,
         _ => return Ok(()),
     }
+
     if passthrough {
         output.write_all(b"\x1bPtmux;")?;
         for b in bytes {
@@ -252,6 +269,7 @@ pub fn native(
     }
     Ok(())
 }
+
 pub fn ansi(p: &Prepared, background: [u8; 3]) -> String {
     let pixels = flatten(&p.image, background)
         .resize_exact(
@@ -265,6 +283,7 @@ pub fn ansi(p: &Prepared, background: [u8; 3]) -> String {
         if y > 0 {
             result.push('\n');
         }
+
         for x in 0..p.area.width {
             let a = pixels.get_pixel(u32::from(x), u32::from(y) * 2).0;
             let b = pixels.get_pixel(u32::from(x), u32::from(y) * 2 + 1).0;

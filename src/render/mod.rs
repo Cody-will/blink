@@ -21,6 +21,7 @@ pub struct RenderOptions {
     pub cell: CellPixels,
     pub passthrough: bool,
 }
+
 fn clip(block: &str, width: u16, height: u16) -> String {
     block
         .lines()
@@ -29,21 +30,25 @@ fn clip(block: &str, width: u16, height: u16) -> String {
         .collect::<Vec<_>>()
         .join("\n")
 }
+
 fn layer(canvas: &mut Canvas, block: &str, area: Rect, color: bool) {
     if area.width == 0 || area.height == 0 {
         return;
     }
+
     let clipped = clip(block, area.width, area.height);
     let text = if color { clipped } else { strip(&clipped) };
     canvas.compose(&mut Compositor::new(&[Layer::new(&text)
         .x(isize::try_from(area.x).unwrap_or(0))
         .y(isize::try_from(area.y).unwrap_or(0))]));
 }
+
 fn styled_line(line: &Line, bg: Option<&str>) -> String {
     line.iter()
         .map(|(text, s)| s.resolve_with_background(bg).render(text))
         .collect()
 }
+
 fn paint(
     canvas: &mut Canvas,
     p: &Placed<'_>,
@@ -54,6 +59,7 @@ fn paint(
     if p.area.width == 0 || p.area.height == 0 {
         return;
     }
+
     let node = p.node;
     let mut container = node.container.clone();
     container.background =
@@ -81,6 +87,7 @@ fn paint(
                 ..p.content
             }
         };
+
         let text = truncate(&format!(" {title} "), usize::from(area.width), "");
         let aligned = place_horizontal(
             usize::from(area.width),
@@ -106,12 +113,14 @@ fn paint(
             options.color,
         );
     }
+
     if !node.lines.is_empty() {
         let area = Rect {
             y: p.content.y + title_rows,
             height: p.content.height.saturating_sub(title_rows),
             ..p.content
         };
+
         let lines = node
             .lines
             .iter()
@@ -133,12 +142,14 @@ fn paint(
         );
         layer(canvas, &block, area, options.color);
     }
+
     if let Some(image) = &node.image {
         let area = Rect {
             y: p.content.y + title_rows,
             height: p.content.height.saturating_sub(title_rows),
             ..p.content
         };
+
         let background = bg.map(graphics::rgb).unwrap_or([0, 0, 0]);
         if options.backend == Backend::Text {
             let placeholder = "[image]";
@@ -171,14 +182,17 @@ fn paint(
             }
         }
     }
+
     for child in &p.children {
         paint(canvas, child, options, bg, native);
     }
 }
+
 pub fn compose(root: &Placed<'_>, options: &RenderOptions) -> anyhow::Result<Vec<u8>> {
     if u64::from(root.area.width) * u64::from(root.area.height) > 1_000_000 {
         anyhow::bail!("Terminal area exceeds one million cells");
     }
+
     let mut canvas = Canvas::new(usize::from(root.area.width), usize::from(root.area.height));
     let mut native = vec![];
     paint(&mut canvas, root, options, None, &mut native);
@@ -203,6 +217,7 @@ pub fn compose(root: &Placed<'_>, options: &RenderOptions) -> anyhow::Result<Vec
             output.write_all(b"\x1b[0m")?;
         }
     }
+
     for (image, bg) in native {
         graphics::native(
             options.backend,
@@ -219,18 +234,21 @@ pub fn compose(root: &Placed<'_>, options: &RenderOptions) -> anyhow::Result<Vec
     )?;
     Ok(output)
 }
+
 /// Plain output follows configuration order rather than terminal-height geometry.
 pub fn plain(root: &Resolved) -> String {
     fn visit(n: &Resolved, out: &mut Vec<(String, bool)>) {
         if n.swatches {
             return;
         }
+
         if let Some((title, _)) = &n.title {
             if !out.is_empty() {
                 out.push((String::new(), false));
             }
             out.push((title.clone(), false));
         }
+
         for line in &n.lines {
             let text = line.iter().map(|(s, _)| s.as_str()).collect::<String>();
             let art = n.kind == crate::layout::node::Kind::Ascii;
@@ -243,10 +261,12 @@ pub fn plain(root: &Resolved) -> String {
                 art,
             ));
         }
+
         for child in &n.children {
             visit(child, out);
         }
     }
+
     let mut lines = vec![];
     visit(root, &mut lines);
     while lines

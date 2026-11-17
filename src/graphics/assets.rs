@@ -16,6 +16,7 @@ enum ImageKey {
     Bundled(&'static str),
     File(PathBuf),
 }
+
 #[derive(Default)]
 pub struct Assets {
     decoded: HashMap<ImageKey, Option<Rc<DynamicImage>>>,
@@ -23,30 +24,36 @@ pub struct Assets {
     automatic: Option<&'static Artwork>,
     pub warnings: BTreeSet<String>,
 }
+
 pub fn expand(path: &str, base: &Path) -> anyhow::Result<PathBuf> {
     if path == "~" || path.starts_with("~/") || path.starts_with("~\\") {
         return Ok(dirs::home_dir()
             .context("Home directory unavailable")?
             .join(path.get(2..).unwrap_or("")));
     }
+
     if path.starts_with('~') {
         bail!("Only ~ and ~/ home paths are supported");
     }
     Ok(base.join(path))
 }
+
 fn file_path(path: &str, base: &Path) -> anyhow::Result<PathBuf> {
     let path = expand(path, base)?;
     Ok(path.canonicalize().unwrap_or(path))
 }
+
 fn read(path: &Path, limit: u64) -> anyhow::Result<Vec<u8>> {
     let file = std::fs::File::open(path)?;
     let metadata = file.metadata()?;
     if !metadata.is_file() {
         bail!("Expected a regular file");
     }
+
     if metadata.len() > limit {
         bail!("Asset exceeds {} MiB input limit", limit / (1024 * 1024));
     }
+
     let mut bytes = vec![];
     file.take(limit + 1).read_to_end(&mut bytes)?;
     if bytes.len() as u64 > limit {
@@ -54,6 +61,7 @@ fn read(path: &Path, limit: u64) -> anyhow::Result<Vec<u8>> {
     }
     Ok(bytes)
 }
+
 /// Sanitize text art while preserving spacing, blank lines and Unicode display widths.
 pub fn ascii(text: &str) -> String {
     let text = rusty_x_ansi::util::strip(text.trim_start_matches('\u{feff}'));
@@ -80,6 +88,7 @@ pub fn ascii(text: &str) -> String {
     }
     result
 }
+
 impl Assets {
     pub fn load(&mut self, selector: Option<&str>, base: &Path) -> Option<Rc<DynamicImage>> {
         let selector = selector.unwrap_or("auto");
@@ -88,6 +97,7 @@ impl Assets {
         } else {
             catalog::find(selector)
         };
+
         let key = if let Some(art) = bundled {
             ImageKey::Bundled(art.id)
         } else {
@@ -99,9 +109,11 @@ impl Assets {
                 }
             }
         };
+
         if let Some(image) = self.decoded.get(&key) {
             return image.clone();
         }
+
         let result = (|| -> anyhow::Result<DynamicImage> {
             let bytes = match &key {
                 ImageKey::Bundled(id) => Cow::Borrowed(
@@ -111,6 +123,7 @@ impl Assets {
                 ),
                 ImageKey::File(path) => Cow::Owned(read(path, 64 * 1024 * 1024)?),
             };
+
             let mut reader =
                 ImageReader::new(std::io::Cursor::new(bytes.as_ref())).with_guessed_format()?;
             let mut limits = image::Limits::default();
@@ -132,6 +145,7 @@ impl Assets {
         self.decoded.insert(key, image.clone());
         image
     }
+
     pub fn load_ascii(&mut self, path: &str, base: &Path) -> Option<Rc<str>> {
         let path = match file_path(path, base) {
             Ok(path) => path,
@@ -140,9 +154,11 @@ impl Assets {
                 return None;
             }
         };
+
         if let Some(text) = self.text.get(&path) {
             return text.clone();
         }
+
         let result = read(&path, 1024 * 1024)
             .and_then(|bytes| String::from_utf8(bytes).context("ASCII art must be UTF-8 text"));
         let text = match result {
@@ -156,6 +172,7 @@ impl Assets {
         self.text.insert(path, text.clone());
         text
     }
+
     #[cfg(test)]
     pub fn decoded_count(&self) -> usize {
         self.decoded.len()

@@ -27,39 +27,46 @@ pub enum Measurement {
     Addresses(Vec<(String, Vec<std::net::IpAddr>)>),
     Adapters(Vec<Adapter>),
 }
+
 #[derive(Debug, Clone)]
 pub struct Host {
     pub vendor: Option<String>,
     pub model: String,
     pub version: Option<String>,
 }
+
 #[derive(Debug, Clone)]
 pub struct Adapter {
     pub name: String,
     pub online: bool,
     pub watts: Option<f64>,
 }
+
 #[derive(Debug, Clone)]
 pub struct Disk {
     pub mount: String,
     pub total: u64,
     pub available: u64,
 }
+
 #[derive(Debug, Clone)]
 pub struct Battery {
     pub percentage: f64,
     pub state: String,
 }
+
 #[derive(Debug, Default, Clone)]
 pub struct Snapshot {
     pub values: BTreeMap<String, Measurement>,
 }
+
 impl Snapshot {
     pub fn requested<'a>(nodes: impl IntoIterator<Item = &'a Node>) -> BTreeSet<String> {
         fn visit(n: &Node, keys: &mut BTreeSet<String>) {
             if !n.visible {
                 return;
             }
+
             if n.kind == Kind::Component
                 && n.value.is_none()
                 && let Some(d) = crate::components::definition(&n.name)
@@ -75,16 +82,19 @@ impl Snapshot {
                     _ => {}
                 }
             }
+
             for c in n.header.iter().chain(&n.children).chain(&n.footer) {
                 visit(c, keys);
             }
         }
+
         let mut keys = BTreeSet::new();
         for n in nodes {
             visit(n, &mut keys);
         }
         keys
     }
+
     pub fn collect(keys: &BTreeSet<String>) -> Self {
         let mut out = Self::default();
         let need_cpu = keys
@@ -104,6 +114,7 @@ impl Snapshot {
                 CpuRefreshKind::nothing()
             });
         }
+
         if need_ram {
             refresh = refresh.with_memory(if keys.contains("swap") {
                 MemoryRefreshKind::nothing().with_ram().with_swap()
@@ -111,11 +122,13 @@ impl Snapshot {
                 MemoryRefreshKind::nothing().with_ram()
             });
         }
+
         let mut sys = if need_cpu || need_ram {
             System::new_with_specifics(refresh).ok()
         } else {
             None
         };
+
         let sample_started = Instant::now();
         let hostname = if keys.contains("hostname") || keys.contains("title") {
             System::host_name().ok()
@@ -211,12 +224,14 @@ impl Snapshot {
                 "display" => displays(),
                 _ => None,
             };
+
             if let Some(value) =
                 value.filter(|v| !matches!(v,Measurement::Text(s) if s.trim().is_empty()))
             {
                 out.values.insert(key.clone(), value);
             }
         }
+
         if keys.contains("cpu_usage")
             && let Some(s) = sys.as_mut()
         {
@@ -233,10 +248,12 @@ impl Snapshot {
         }
         out
     }
+
     pub fn formatted(&self, key: &str) -> Option<String> {
         self.values.get(key).map(Measurement::format)
     }
 }
+
 impl Measurement {
     pub fn format(&self) -> String {
         match self {
@@ -322,6 +339,7 @@ impl Measurement {
         }
     }
 }
+
 pub fn bytes(value: u64) -> String {
     let units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"];
     let mut n = value as f64;
@@ -330,19 +348,23 @@ pub fn bytes(value: u64) -> String {
         n /= 1024.0;
         unit += 1;
     }
+
     if unit == 0 {
         format!("{value} B")
     } else {
         format!("{n:.1} {}", units[unit])
     }
 }
+
 pub fn percentage(used: u64, total: u64) -> Option<f64> {
     (total > 0).then(|| (used as f64 / total as f64 * 100.0).clamp(0.0, 100.0))
 }
+
 fn env_first(keys: &[&str]) -> Option<String> {
     keys.iter()
         .find_map(|k| std::env::var(k).ok().filter(|v| !v.trim().is_empty()))
 }
+
 fn shell() -> Option<String> {
     #[cfg(target_os = "linux")]
     if let Ok(status) = std::fs::read_to_string("/proc/self/status")
@@ -367,6 +389,7 @@ fn shell() -> Option<String> {
             .unwrap_or(s)
     })
 }
+
 fn window_manager() -> Option<String> {
     // Only explicit session evidence; do not infer a WM from the desktop name.
     if std::env::var_os("SWAYSOCK").is_some() {
@@ -377,6 +400,7 @@ fn window_manager() -> Option<String> {
         env_first(&["WINDOW_MANAGER", "XDG_SESSION_WM"])
     }
 }
+
 fn batteries() -> Option<Measurement> {
     let manager = battery::Manager::new().ok()?;
     let values: Vec<_> = manager
@@ -390,11 +414,13 @@ fn batteries() -> Option<Measurement> {
         .collect();
     (!values.is_empty()).then_some(Measurement::Batteries(values))
 }
+
 fn displays() -> Option<Measurement> {
     #[cfg(target_os = "linux")]
     if std::env::var_os("DISPLAY").is_none() && std::env::var_os("WAYLAND_DISPLAY").is_none() {
         return None;
     }
+
     let displays = display_info::DisplayInfo::all().ok()?;
     let values: Vec<_> = displays
         .iter()

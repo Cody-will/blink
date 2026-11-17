@@ -14,6 +14,7 @@ use std::{path::Path, rc::Rc};
 use unicode_width::UnicodeWidthStr;
 
 pub type Line = Vec<(String, TextStyleConfig)>;
+
 #[derive(Clone)]
 pub struct Resolved {
     pub kind: Kind,
@@ -38,6 +39,7 @@ pub struct Resolved {
     pub cell_ratio: f64,
     pub image_columns: u16,
 }
+
 #[derive(Clone)]
 pub struct ComponentRow {
     pub icon: String,
@@ -47,12 +49,14 @@ pub struct ComponentRow {
     pub label_style: TextStyleConfig,
     pub value_style: TextStyleConfig,
 }
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Role {
     Header,
     Body,
     Footer,
 }
+
 impl Resolved {
     pub fn empty(container: ContainerStyleConfig) -> Self {
         Self {
@@ -79,10 +83,12 @@ impl Resolved {
             image_columns: 20,
         }
     }
+
     pub fn title_rows(&self) -> u16 {
         u16::from(self.title.is_some() && !self.container.border.kind.occupies_space())
     }
 }
+
 /// Hide optional visuals only when explicitly marked optional. Custom arrangements never reflow.
 pub fn prepare(
     cfg: &mut Config,
@@ -95,6 +101,7 @@ pub fn prepare(
     if no_icons || plain {
         cfg.icons.enabled = false;
     }
+
     fn visit(
         n: &mut Node,
         width: u16,
@@ -108,15 +115,18 @@ pub fn prepare(
         {
             n.visible = false;
         }
+
         if n.kind == Kind::Ascii && n.optional && !plain && (width < 64 || height < 20) {
             n.visible = false;
         }
+
         if n.optional
             && n.kind == Kind::Swatches
             && (plain || !responsive && (height < 24 || width < 64))
         {
             n.visible = false;
         }
+
         if !plain
             && !responsive
             && n.optional
@@ -125,9 +135,11 @@ pub fn prepare(
         {
             n.visible = false;
         }
+
         if no_image || plain {
             n.icon_path = None;
         }
+
         for child in n
             .header
             .iter_mut()
@@ -147,6 +159,7 @@ pub fn prepare(
         false,
     );
 }
+
 pub fn resolve(
     cfg: &Config,
     snapshot: &Snapshot,
@@ -165,11 +178,13 @@ pub fn resolve(
         if !n.visible {
             return Ok(None);
         }
+
         let base_style = match n.kind {
             Kind::Module => cfg.styles.module.clone(),
             Kind::Component => cfg.styles.component.clone(),
             _ => ContainerStyleConfig::plain(),
         };
+
         let mut r = Resolved::empty(override_style(&base_style, &n.style)?.colors(p)?);
         r.cell_ratio = f64::from(cfg.display.cell_height) / f64::from(cfg.display.cell_width);
         r.kind = n.kind;
@@ -188,10 +203,12 @@ pub fn resolve(
             Kind::Column => Direction::Vertical,
             _ => n.direction,
         };
+
         let text = override_style(&cfg.styles.text, &n.text_style)?.colors(p)?;
         if !n.title.is_empty() {
             r.title = Some((clean(&n.title), cfg.styles.title.colors(p)?));
         }
+
         match n.kind {
             Kind::Text => {
                 for line in clean(&n.content).split('\n') {
@@ -206,6 +223,7 @@ pub fn resolve(
                 } else {
                     Rc::from(crate::graphics::assets::ascii(&n.content))
                 };
+
                 for line in art.split('\n') {
                     r.lines.push(vec![(line.into(), text.clone())]);
                 }
@@ -218,12 +236,14 @@ pub fn resolve(
                 } else {
                     components::Presentation::Data
                 };
+
                 match presentation {
                     components::Presentation::Title | components::Presentation::Separator => {
                         let title = snapshot.formatted("title");
                         if title.is_none() && cfg.display.unavailable == Unavailable::Hide {
                             return Ok(None);
                         }
+
                         let title = clean(title.as_deref().unwrap_or("N/A"));
                         let output = if presentation == components::Presentation::Separator {
                             "─".repeat(title.width().min(512))
@@ -256,6 +276,7 @@ pub fn resolve(
                         if value.is_none() && cfg.display.unavailable == Unavailable::Hide {
                             return Ok(None);
                         }
+
                         let label = n.label.as_deref().unwrap_or_else(|| {
                             components::definition(&n.name)
                                 .map(|d| d.label)
@@ -329,6 +350,7 @@ pub fn resolve(
             }
             _ => {}
         }
+
         for (nodes, role) in [
             (&n.header, Role::Header),
             (&n.children, Role::Body),
@@ -341,6 +363,7 @@ pub fn resolve(
                 }
             }
         }
+
         if n.kind == Kind::Module
             && !n.children.is_empty()
             && r.children.is_empty()
@@ -348,6 +371,7 @@ pub fn resolve(
         {
             return Ok(None);
         }
+
         if matches!(n.kind, Kind::Row | Kind::Column) && r.children.is_empty() && r.title.is_none()
         {
             return Ok(None);
@@ -358,6 +382,7 @@ pub fn resolve(
         }
         Ok(Some(r))
     }
+
     let mut root = Resolved::empty(cfg.styles.window.colors(&palette)?);
     root.direction = cfg.layout.direction;
     root.gap = cfg.layout.gap;
@@ -378,6 +403,7 @@ pub fn resolve(
     }
     Ok(root)
 }
+
 fn align_components(module: &mut Resolved) {
     let icon_width = module
         .children
@@ -399,10 +425,12 @@ fn align_components(module: &mut Resolved) {
         }
     }
 }
+
 fn format_component(node: &mut Resolved, icon_width: usize, label_width: usize) {
     let Some(c) = &node.component else {
         return;
     };
+
     let iw = icon_width.max(c.icon.width());
     let lw = label_width.max(c.label.width());
     node.lines = c
@@ -418,6 +446,7 @@ fn format_component(node: &mut Resolved, icon_width: usize, label_width: usize) 
                     c.icon_style.clone(),
                 ));
             }
+
             if lw > 0 {
                 let label = if i == 0 { &c.label } else { "" };
                 line.push((
@@ -437,6 +466,7 @@ fn format_component(node: &mut Resolved, icon_width: usize, label_width: usize) 
         node.children.push(text);
     }
 }
+
 pub fn clean(text: &str) -> String {
     // Strip ANSI/control sequences from user content before styling it ourselves.
     rusty_x_ansi::util::strip(text)

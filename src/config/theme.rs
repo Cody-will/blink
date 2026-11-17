@@ -10,6 +10,7 @@ pub const NAMES: &[&str] = &[
     "dracula",
     "monochrome",
 ];
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Palette {
@@ -23,6 +24,7 @@ pub struct Palette {
     pub warning: String,
     pub error: String,
 }
+
 impl Palette {
     pub fn theme(name: &str) -> Result<Self> {
         let c = match name {
@@ -68,6 +70,7 @@ impl Palette {
             error: c[8].into(),
         })
     }
+
     pub fn color(&self, value: &str) -> Result<String> {
         let result = match value.strip_prefix('@') {
             None => value,
@@ -92,6 +95,7 @@ impl Palette {
         )
     }
 }
+
 pub fn validate_color(value: &str) -> Result<()> {
     let hex = value
         .strip_prefix('#')

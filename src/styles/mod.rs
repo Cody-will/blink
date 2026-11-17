@@ -169,6 +169,7 @@ pub enum Alignment {
     #[serde(alias = "right", alias = "bottom")]
     End,
 }
+
 impl Alignment {
     pub fn position(self) -> Position {
         match self {
@@ -177,6 +178,7 @@ impl Alignment {
             Self::End => Position::RIGHT,
         }
     }
+
     pub fn offset(self, available: u16, used: u16) -> u16 {
         let spare = available.saturating_sub(used);
         match self {
@@ -186,6 +188,7 @@ impl Alignment {
         }
     }
 }
+
 pub trait StyleBuilder {
     fn build_style(&self) -> Style;
 }
@@ -210,11 +213,13 @@ fn resolve_background(value: Option<&str>, palette: &Palette) -> anyhow::Result<
         })
         .transpose()
 }
+
 impl StyleBuilder for TextStyleConfig {
     fn build_style(&self) -> Style {
         self.resolve()
     }
 }
+
 impl TextStyleConfig {
     pub fn colors(&self, palette: &Palette) -> anyhow::Result<Self> {
         let mut s = self.clone();
@@ -223,6 +228,7 @@ impl TextStyleConfig {
         Ok(s)
     }
 }
+
 impl ContainerStyleConfig {
     pub fn plain() -> Self {
         Self {
@@ -233,12 +239,14 @@ impl ContainerStyleConfig {
             ..Default::default()
         }
     }
+
     pub fn colors(&self, palette: &Palette) -> anyhow::Result<Self> {
         let mut s = self.clone();
         s.border.color = palette.color(&s.border.color)?;
         s.background = resolve_background(s.background.as_deref(), palette)?;
         Ok(s)
     }
+
     pub fn decoration(&self, width: u16, height: u16) -> String {
         let border = match self.border.kind {
             BorderType::None => None,
@@ -259,6 +267,7 @@ impl ContainerStyleConfig {
                 .border(b, &[true])
                 .border_foreground(&[&self.border.color]);
         }
+
         if let Some(bg) = effective_background(self.background.as_deref(), None) {
             style = style.background(bg);
         }

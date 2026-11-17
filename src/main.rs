@@ -63,6 +63,7 @@ struct Args {
     #[arg(long)]
     height: Option<u16>,
 }
+
 fn run() -> anyhow::Result<()> {
     let args = Args::parse();
     let stdout = io::stdout();
@@ -72,6 +73,7 @@ fn run() -> anyhow::Result<()> {
         writeln!(output, "{}", config::theme::NAMES.join("\n"))?;
         return Ok(());
     }
+
     if args.list_images {
         for art in graphics::catalog::ARTWORK {
             let default = art
@@ -87,8 +89,10 @@ fn run() -> anyhow::Result<()> {
                 });
             writeln!(output, "{}\t{}{default}", art.id, art.description)?;
         }
+
         return Ok(());
     }
+
     if args.list_modules {
         for name in components::PRESETS.iter().copied() {
             if let Some((title, keys)) = components::preset(name) {
@@ -99,19 +103,24 @@ fn run() -> anyhow::Result<()> {
         for d in components::DEFINITIONS {
             writeln!(output, "{}\t{}", d.name, d.label)?;
         }
+
         return Ok(());
     }
+
     let inspect = args.print_config || args.check_config;
     let (mut cfg, path) = Config::load(args.config.as_deref(), !inspect)?;
     if let Some(theme) = args.theme {
         cfg.theme = theme;
     }
+
     if let Some(direction) = args.layout {
         cfg.layout.direction = direction;
     }
+
     if let Some(backend) = args.graphics {
         cfg.graphics = backend;
     }
+
     if args.no_icons {
         cfg.icons.enabled = false;
     }
@@ -128,6 +137,7 @@ fn run() -> anyhow::Result<()> {
         output.write_all(cfg.editable_toml()?.as_bytes())?;
         return Ok(());
     }
+
     let base = path.parent().unwrap_or_else(|| std::path::Path::new("."));
     let mut assets = graphics::assets::Assets::default();
     if args.check_config {
@@ -139,17 +149,21 @@ fn run() -> anyhow::Result<()> {
             if !n.visible {
                 return;
             }
+
             if n.kind == layout::node::Kind::Image {
                 assets.load(n.path.as_deref(), base);
             }
+
             if n.kind == layout::node::Kind::Ascii
                 && let Some(path) = &n.path
             {
                 assets.load_ascii(path, base);
             }
+
             if let Some(path) = &n.icon_path {
                 assets.load(Some(path), base);
             }
+
             for c in n.header.iter().chain(&n.children).chain(&n.footer) {
                 check(c, assets, base);
             }
@@ -165,6 +179,7 @@ fn run() -> anyhow::Result<()> {
         writeln!(output, "Configuration is valid")?;
         return Ok(());
     }
+
     let plain = args.plain || !is_terminal || std::env::var("TERM").is_ok_and(|t| t == "dumb");
     let color = !args.no_color && std::env::var_os("NO_COLOR").is_none() && !plain;
     let term = if plain {
@@ -179,6 +194,7 @@ fn run() -> anyhow::Result<()> {
     } else {
         terminal::Terminal::detect(&cfg.display)
     };
+
     let width = args.width.unwrap_or(term.width);
     // Always leave at least one row for the returning prompt, even if reserved_rows is zero.
     let height = args
@@ -214,6 +230,7 @@ fn run() -> anyhow::Result<()> {
             cell: term.cell,
             passthrough: cfg.display.multiplexer_passthrough && std::env::var_os("TMUX").is_some(),
         };
+
         let bytes = render::compose(&root.place(Rect::new(0, 0, width, height)), &options)?;
         output
             .write_all(&bytes)
@@ -225,6 +242,7 @@ fn run() -> anyhow::Result<()> {
     }
     Ok(())
 }
+
 fn main() -> std::process::ExitCode {
     match run() {
         Ok(()) => std::process::ExitCode::SUCCESS,

@@ -3,12 +3,14 @@ use crate::{
     content::Resolved,
     layout::{Direction, Size, rect::Rect},
 };
+
 pub struct Placed<'a> {
     pub node: &'a Resolved,
     pub area: Rect,
     pub content: Rect,
     pub children: Vec<Placed<'a>>,
 }
+
 impl Resolved {
     pub fn place(&self, area: Rect) -> Placed<'_> {
         let content = area.inner(&self.container);
@@ -20,6 +22,7 @@ impl Resolved {
             height: content.height.saturating_sub(title + lines),
             ..content
         };
+
         let mut rects = allocate(&self.children, self.direction, self.gap, child_area);
         if let Some(last) = rects.last() {
             let (dx, dy) = if self.direction == Direction::Horizontal {
@@ -37,6 +40,7 @@ impl Resolved {
                         .offset(child_area.height, last.y + last.height - child_area.y),
                 )
             };
+
             for rect in &mut rects {
                 rect.x += dx;
                 rect.y += dy;
@@ -62,6 +66,7 @@ impl Resolved {
                 }
             }
         }
+
         let children = self
             .children
             .iter()
@@ -76,17 +81,20 @@ impl Resolved {
         }
     }
 }
+
 pub fn allocate(nodes: &[Resolved], direction: Direction, gap: u16, area: Rect) -> Vec<Rect> {
     let length = if direction == Direction::Horizontal {
         area.width
     } else {
         area.height
     };
+
     let gap = if nodes.len() > 1 {
         gap.min(length / (nodes.len() - 1).min(u16::MAX as usize) as u16)
     } else {
         0
     };
+
     let available = length.saturating_sub(
         gap.saturating_mul(nodes.len().saturating_sub(1).min(u16::MAX as usize) as u16),
     );
@@ -109,6 +117,7 @@ pub fn allocate(nodes: &[Resolved], direction: Direction, gap: u16, area: Rect) 
         sizes[i] = request.min(remaining);
         remaining -= sizes[i];
     }
+
     let mut fills = nodes.iter().filter(|n| n.size == Size::Fill).count() as u16;
     for (i, node) in nodes.iter().enumerate() {
         if node.size == Size::Fill {
@@ -117,6 +126,7 @@ pub fn allocate(nodes: &[Resolved], direction: Direction, gap: u16, area: Rect) 
             fills -= 1;
         }
     }
+
     let mut offset = 0u16;
     sizes
         .into_iter()

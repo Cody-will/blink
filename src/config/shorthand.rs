@@ -11,6 +11,7 @@ fn kind(table: &mut Table, expected: &str, path: &str) -> anyhow::Result<()> {
     table.insert("type".into(), Value::String(expected.into()));
     Ok(())
 }
+
 fn component(value: Value, path: &str, depth: usize) -> anyhow::Result<Value> {
     let mut table = match value {
         Value::String(name) => Table::from_iter([("name".into(), Value::String(name))]),
@@ -27,6 +28,7 @@ fn component(value: Value, path: &str, depth: usize) -> anyhow::Result<Value> {
     node(&mut table, path, depth, None)?;
     Ok(Value::Table(table))
 }
+
 fn module(value: Value, path: &str, depth: usize, default_size: &str) -> anyhow::Result<Value> {
     let mut table = match value {
         Value::String(preset) => Table::from_iter([("preset".into(), Value::String(preset))]),
@@ -40,6 +42,7 @@ fn module(value: Value, path: &str, depth: usize, default_size: &str) -> anyhow:
     node(&mut table, path, depth, None)?;
     Ok(Value::Table(table))
 }
+
 fn node(
     table: &mut Table,
     path: &str,
@@ -49,10 +52,12 @@ fn node(
     if depth > 64 {
         bail!("{path}: excessive layout depth");
     }
+
     if let Some(align) = table.remove("align") {
         table.entry("align_h").or_insert_with(|| align.clone());
         table.entry("align_v").or_insert(align);
     }
+
     if let Some(art) = table.remove("ascii") {
         if ["image", "path", "content"]
             .iter()
@@ -78,20 +83,24 @@ fn node(
             _ => bail!("{path}.ascii: expected a file path or {{ text = \"...\" }}"),
         }
     }
+
     if let Some(Value::String(image)) = table.get("image").cloned() {
         kind(table, "image", path)?;
         table.remove("image");
         if table.contains_key("path") {
             bail!("{path}: specify image or path, not both");
         }
+
         if !matches!(image.as_str(), "builtin" | "auto") {
             table.insert("path".into(), Value::String(image));
         }
     }
+
     if let Some(modules) = table.remove("modules") {
         if table.contains_key("children") {
             bail!("{path}: specify modules or children, not both");
         }
+
         let direction = table
             .get("direction")
             .and_then(Value::as_str)
@@ -115,6 +124,7 @@ fn node(
             .collect::<anyhow::Result<Vec<_>>>()?;
         table.insert("children".into(), Value::Array(children));
     }
+
     if let Some(components) = table.remove("components") {
         if table.contains_key("children") {
             bail!("{path}: specify components or children, not both");
@@ -131,6 +141,7 @@ fn node(
             .collect::<anyhow::Result<Vec<_>>>()?;
         table.insert("children".into(), Value::Array(children));
     }
+
     if let Some(swatches) = table.remove("swatches") {
         let show = swatches
             .as_bool()
@@ -141,9 +152,11 @@ fn node(
         ) {
             bail!("{path}: swatches requires a row or column");
         }
+
         if !table.contains_key("type") {
             kind(table, "column", path)?;
         }
+
         if !table.contains_key("children") {
             let children = if let Some(default) = defaults.filter(|d| {
                 matches!(
@@ -157,6 +170,7 @@ fn node(
             };
             table.insert("children".into(), children);
         }
+
         let children = table
             .get_mut("children")
             .and_then(Value::as_array_mut)
@@ -171,6 +185,7 @@ fn node(
             })?);
         }
     }
+
     if let Some(Value::String(size)) = table.get("size") {
         if let Some(percent) = size.strip_suffix('%') {
             let percent = percent
@@ -190,6 +205,7 @@ fn node(
             Value::Table(Table::from_iter([("fixed".into(), Value::Integer(*size))])),
         );
     }
+
     for edge in ["header", "footer"] {
         if let Some(values) = table.remove(edge) {
             let values = values
@@ -203,6 +219,7 @@ fn node(
             table.insert(edge.into(), Value::Array(normalized));
         }
     }
+
     if let Some(Value::Array(children)) = table.get_mut("children") {
         for (i, child) in children.iter_mut().enumerate() {
             let child = child
@@ -213,6 +230,7 @@ fn node(
     }
     Ok(())
 }
+
 pub fn normalize(value: &mut Value) -> anyhow::Result<()> {
     let root = value
         .as_table_mut()
@@ -236,6 +254,7 @@ pub fn normalize(value: &mut Value) -> anyhow::Result<()> {
         }
         window.insert("background".into(), Value::String(background.into()));
     }
+
     if let Some(Value::Table(layout)) = root.get_mut("layout") {
         let defaults = super::Layout::default();
         for (side, default) in [("first", &defaults.first), ("second", &defaults.second)] {

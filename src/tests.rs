@@ -31,6 +31,7 @@ fn snapshot() -> Snapshot {
         ]),
     }
 }
+
 fn resolve(text: &str) -> Resolved {
     let cfg = Config::parse(text).unwrap();
     content::resolve(
@@ -41,12 +42,14 @@ fn resolve(text: &str) -> Resolved {
     )
     .unwrap()
 }
+
 fn leaf(size: Size) -> Resolved {
     let mut n = Resolved::empty(ContainerStyleConfig::plain());
     n.size = size;
     n.lines = vec![vec![("abc".into(), styles::TextStyleConfig::default())]];
     n
 }
+
 fn options(backend: Backend) -> render::RenderOptions {
     render::RenderOptions {
         backend,
@@ -58,14 +61,18 @@ fn options(backend: Backend) -> render::RenderOptions {
         passthrough: false,
     }
 }
+
 #[test]
 fn nested_defaults_preserve_styles_and_node_type() {
-    let cfg=Config::parse("[styles.label]\nitalic=true\n[styles.window.padding]\nleft=3\n[layout.first]\nsize={percent=40}").unwrap();
+    let cfg = Config::parse(
+        "[styles.label]\nitalic=true\n[styles.window.padding]\nleft=3\n[layout.first]\nsize={percent=40}"
+    ).unwrap();
     assert!(cfg.styles.label.bold && cfg.styles.label.italic);
     assert_eq!(cfg.styles.window.padding.right, 1);
     assert_eq!(cfg.layout.first.kind, Kind::Image);
     assert_eq!(cfg.layout.first.size, Size::Percent(40));
 }
+
 #[test]
 fn changed_type_and_empty_children_replace_defaults() {
     let cfg =
@@ -74,12 +81,14 @@ fn changed_type_and_empty_children_replace_defaults() {
     assert_eq!(cfg.layout.first.size, Size::Fill);
     assert!(cfg.layout.second.children.is_empty());
 }
+
 #[test]
 fn complete_default_config_roundtrips() {
     let cfg = Config::parse(&toml::to_string_pretty(&Config::default()).unwrap()).unwrap();
     assert_eq!(cfg.theme, "gruvbox-material");
     assert_eq!(cfg.layout.second.children[0].children[0].name, "os");
 }
+
 #[test]
 fn config_rejects_invalid_fields_values_and_colors() {
     for text in [
@@ -101,12 +110,14 @@ fn config_rejects_invalid_fields_values_and_colors() {
         assert!(Config::parse(text).is_err(), "accepted: {text}");
     }
 }
+
 #[test]
 fn themes_and_palette_overrides_are_consistent() {
     for name in config::theme::NAMES {
         let cfg = Config::parse(&format!("theme='{name}'")).unwrap();
         assert!(cfg.colors().unwrap().fg.starts_with('#'));
     }
+
     let cfg = Config::parse(
         "theme='nord'\n[palette]\naccent='#123'\n[styles.text]\nforeground='@accent'",
     )
@@ -120,12 +131,14 @@ fn themes_and_palette_overrides_are_consistent() {
         "#112233"
     );
 }
+
 #[test]
 fn presets_expand_and_unknown_presets_fail() {
     let cfg = Config::parse("[layout.first]\ntype='module'\npreset='storage'").unwrap();
     assert_eq!(cfg.layout.first.children[0].name, "disk");
     assert!(Config::parse("[layout.first]\ntype='module'\npreset='fake'").is_err());
 }
+
 #[test]
 fn original_config_converts_without_losing_style_or_layout() {
     let cfg = Config::parse(
@@ -154,6 +167,7 @@ child={type="column",gap=1,children=[]}
     assert_eq!(cfg.layout.first.path.as_deref(), Some("logo.png"));
     assert!(matches!(cfg.styles.module.border.kind, BorderType::Double));
 }
+
 #[test]
 fn unmappable_legacy_settings_fail_explicitly() {
     assert!(
@@ -163,6 +177,7 @@ fn unmappable_legacy_settings_fail_explicitly() {
             .contains("gap")
     );
 }
+
 #[test]
 fn missing_metrics_render_na_or_hide() {
     let text = "[layout.first]\ntype='module'\nchildren=[{type='component',name='battery',size='auto'}]\n[layout.second]\nchildren=[]";
@@ -186,6 +201,7 @@ fn missing_metrics_render_na_or_hide() {
     .unwrap();
     assert!(!render::plain(&root).contains("Battery"));
 }
+
 #[test]
 fn unit_formatting_and_zero_totals_are_safe() {
     assert_eq!(bytes(1024), "1.0 KiB");
@@ -194,14 +210,18 @@ fn unit_formatting_and_zero_totals_are_safe() {
     assert_eq!(percentage(1, 4), Some(25.0));
     assert_eq!(percentage(5, 4), Some(100.0));
 }
+
 #[test]
 fn requested_metrics_ignore_hidden_and_static_components() {
-    let cfg=Config::parse("[layout.first]\ntype='column'\nchildren=[{type='component',name='cpu_usage',visible=false},{type='component',name='os',value='static'},{type='component',name='memory'}]\n[layout.second]\nchildren=[]").unwrap();
+    let cfg = Config::parse(
+        "[layout.first]\ntype='column'\nchildren=[{type='component',name='cpu_usage',visible=false},{type='component',name='os',value='static'},{type='component',name='memory'}]\n[layout.second]\nchildren=[]"
+    ).unwrap();
     assert_eq!(
         Snapshot::requested([&cfg.layout.first, &cfg.layout.second]),
         BTreeSet::from(["memory".into()])
     );
 }
+
 #[test]
 fn label_columns_align_unicode_without_manual_spaces() {
     let root = resolve(
@@ -215,6 +235,7 @@ fn label_columns_align_unicode_without_manual_spaces() {
         b[..b.find("second").unwrap()].width()
     );
 }
+
 #[test]
 fn static_text_visibility_and_multiline_values_work() {
     let root = resolve(
@@ -222,6 +243,7 @@ fn static_text_visibility_and_multiline_values_work() {
     );
     assert!(!render::plain(&root).contains("hidden"));
 }
+
 #[test]
 fn icons_have_safe_modes_and_can_be_disabled() {
     assert!(components::icon("cpu", IconMode::Ascii).is_ascii());
@@ -243,6 +265,7 @@ fn icons_have_safe_modes_and_can_be_disabled() {
     .unwrap();
     assert!(!render::plain(&root).contains("custom"));
 }
+
 #[test]
 fn allocator_reserves_requests_before_fill() {
     let nodes = [
@@ -252,6 +275,7 @@ fn allocator_reserves_requests_before_fill() {
         leaf(Size::Auto),
         leaf(Size::Fill),
     ];
+
     let rects =
         layout::engine::allocate(&nodes, Direction::Horizontal, 1, Rect::new(0, 0, 104, 10));
     assert_eq!(
@@ -259,6 +283,7 @@ fn allocator_reserves_requests_before_fill() {
         vec![31, 10, 25, 3, 31]
     );
 }
+
 #[test]
 fn fill_and_overflow_stay_bounded_in_both_axes() {
     for direction in [Direction::Horizontal, Direction::Vertical] {
@@ -281,6 +306,7 @@ fn fill_and_overflow_stay_bounded_in_both_axes() {
         }
     }
 }
+
 #[test]
 fn measurement_accounts_for_border_padding_and_unicode() {
     let mut n = leaf(Size::Auto);
@@ -291,6 +317,7 @@ fn measurement_accounts_for_border_padding_and_unicode() {
     };
     assert_eq!(n.measure(), (7, 5));
 }
+
 #[test]
 fn border_types_and_hidden_geometry_parse() {
     for kind in ["none", "normal", "rounded", "thick", "double", "hidden"] {
@@ -298,6 +325,7 @@ fn border_types_and_hidden_geometry_parse() {
         assert_eq!(cfg.styles.module.border.inset(), u16::from(kind != "none"));
     }
 }
+
 #[test]
 fn block_alignment_uses_assigned_region() {
     let mut n = leaf(Size::Auto);
@@ -309,6 +337,7 @@ fn block_alignment_uses_assigned_region() {
     let placed = root.place(Rect::new(0, 0, 20, 10));
     assert_eq!(placed.children[0].area.y, 9);
 }
+
 #[test]
 fn optional_default_visuals_are_removed_on_small_terminals() {
     let mut cfg = Config::default();
@@ -322,6 +351,7 @@ fn optional_default_visuals_are_removed_on_small_terminals() {
             .all(|module| module.visible)
     );
 }
+
 #[test]
 fn missing_images_degrade_to_placeholders() {
     let mut assets = graphics::assets::Assets::default();
@@ -330,6 +360,7 @@ fn missing_images_degrade_to_placeholders() {
     assert!(render::plain(&root).contains("[image unavailable]"));
     assert_eq!(assets.warnings.len(), 1);
 }
+
 #[test]
 fn bundled_asset_is_cached_per_invocation() {
     let mut assets = graphics::assets::Assets::default();
@@ -338,6 +369,7 @@ fn bundled_asset_is_cached_per_invocation() {
     assert!(Rc::ptr_eq(&a, &b));
     assert_eq!(assets.decoded_count(), 1);
 }
+
 #[test]
 fn paths_expand_relative_and_home() {
     assert_eq!(
@@ -351,6 +383,7 @@ fn paths_expand_relative_and_home() {
     );
     assert!(graphics::assets::expand("~other/logo", Path::new(".")).is_err());
 }
+
 #[test]
 fn image_contain_cover_and_stretch_use_cell_dimensions() {
     let image = DynamicImage::new_rgba8(100, 100);
@@ -359,6 +392,7 @@ fn image_contain_cover_and_stretch_use_cell_dimensions() {
         width: 8,
         height: 16,
     };
+
     let p = graphics::prepare(&image, area, &ImageOptions::default(), cell).unwrap();
     assert_eq!(p.area, Rect::new(0, 5, 20, 10));
     for fit in [Fit::Cover, Fit::Stretch] {
@@ -385,6 +419,7 @@ fn image_contain_cover_and_stretch_use_cell_dimensions() {
         .is_none()
     );
 }
+
 #[test]
 fn alpha_blends_against_theme_background() {
     let image = DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(
@@ -395,12 +430,14 @@ fn alpha_blends_against_theme_background() {
     let result = graphics::flatten(&image, [0, 0, 255]).to_rgba8();
     assert_eq!(result.get_pixel(0, 0).0, [128, 0, 127, 255]);
 }
+
 #[test]
 fn kitty_chunks_and_iterm_png_are_complete() {
     let p = Prepared {
         image: DynamicImage::new_rgba8(64, 64),
         area: Rect::new(2, 3, 10, 5),
     };
+
     let mut output = vec![];
     Kitty.render(&p, &mut output).unwrap();
     let text = String::from_utf8(output).unwrap();
@@ -419,6 +456,7 @@ fn kitty_chunks_and_iterm_png_are_complete() {
         .unwrap();
     assert_eq!(image::load_from_memory(&png).unwrap().width(), 64);
 }
+
 #[test]
 fn sixel_roundtrips_a_known_image() {
     let p = Prepared {
@@ -429,12 +467,14 @@ fn sixel_roundtrips_a_known_image() {
         )),
         area: Rect::new(0, 0, 1, 1),
     };
+
     let mut output = vec![];
     Sixel.render(&p, &mut output).unwrap();
     let decoded = icy_sixel::SixelImage::decode(&output).unwrap();
     assert_eq!(decoded.dimensions(), (8, 6));
     assert_eq!(&decoded.pixels[..4], &[255, 0, 0, 255]);
 }
+
 #[test]
 fn capability_replies_select_priority_and_do_not_use_names() {
     let mut caps = Capabilities::default();
@@ -456,10 +496,12 @@ fn capability_replies_select_priority_and_do_not_use_names() {
         Backend::Text
     );
 }
+
 #[test]
 fn component_content_strips_ansi_before_measurement() {
     assert_eq!(content::clean("\x1b[31m界\x1b[0m\t\r"), "界");
 }
+
 #[test]
 fn renderer_keeps_unicode_and_cursor_within_bounds() {
     let root = resolve(
@@ -475,10 +517,12 @@ fn renderer_keeps_unicode_and_cursor_within_bounds() {
             assert!(output.starts_with(b"\x1b[2J\x1b[H"));
             assert!(output.ends_with(format!("\x1b[{};1H\x1b[J", height + 1).as_bytes()));
         }
+
         let mut text = String::from_utf8(output).unwrap().replace("\x1b[H", "");
         for row in 2..=height + 1 {
             text = text.replace(&format!("\x1b[{row};1H"), "\n");
         }
+
         let plain = strip(&text);
         assert!(
             plain.lines().all(|line| line.width() <= usize::from(width)),
@@ -489,6 +533,7 @@ fn renderer_keeps_unicode_and_cursor_within_bounds() {
         }
     }
 }
+
 #[test]
 fn cli_parses_all_advertised_overrides() {
     let args = Args::try_parse_from([
@@ -545,6 +590,7 @@ fn native_images_keep_separate_placements() {
         )));
         root.children.push(child);
     }
+
     for backend in [Backend::Kitty, Backend::Iterm2, Backend::Sixel] {
         let output =
             render::compose(&root.place(Rect::new(0, 0, 8, 4)), &options(backend)).unwrap();
@@ -559,6 +605,7 @@ fn native_images_keep_separate_placements() {
         assert!(text.contains("\x1b[2;5H"));
     }
 }
+
 #[test]
 fn image_backends_propagate_output_failure() {
     struct Broken;
@@ -566,10 +613,12 @@ fn image_backends_propagate_output_failure() {
         fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
             Err(std::io::ErrorKind::BrokenPipe.into())
         }
+
         fn flush(&mut self) -> std::io::Result<()> {
             Ok(())
         }
     }
+
     let p = Prepared {
         image: DynamicImage::new_rgba8(2, 2),
         area: Rect::new(0, 0, 1, 1),
@@ -577,6 +626,7 @@ fn image_backends_propagate_output_failure() {
     assert!(Kitty.render(&p, &mut Broken).is_err());
     assert!(Iterm2.render(&p, &mut Broken).is_err());
 }
+
 #[test]
 fn static_multiline_values_align_continuations() {
     let root = resolve(
@@ -620,6 +670,7 @@ fn common_raster_formats_and_static_gif_frame_load() {
         }
         assert_eq!(assets.load(Some(name), &directory).unwrap().width(), 2);
     }
+
     let path = directory.join("test.gif");
     let mut gif = image::codecs::gif::GifEncoder::new(std::fs::File::create(path).unwrap());
     gif.encode_frames([
@@ -659,7 +710,9 @@ fn plain_output_keeps_optional_information_on_small_terminals() {
 
 #[test]
 fn transparent_backgrounds_validate_and_roundtrip_without_affecting_foregrounds() {
-    let cfg=Config::parse("[styles.window]\nbackground='transparent'\n[styles.text]\nbackground='transparent'\n[layout.first.style]\nbackground='transparent'").unwrap();
+    let cfg = Config::parse(
+        "[styles.window]\nbackground='transparent'\n[styles.text]\nbackground='transparent'\n[layout.first.style]\nbackground='transparent'"
+    ).unwrap();
     let cfg = Config::parse(&toml::to_string_pretty(&cfg).unwrap()).unwrap();
     assert_eq!(cfg.styles.window.background.as_deref(), Some("transparent"));
     assert_eq!(
@@ -673,6 +726,7 @@ fn transparent_backgrounds_validate_and_roundtrip_without_affecting_foregrounds(
     );
     assert!(Config::parse("[styles.text]\nforeground='transparent'").is_err());
 }
+
 #[test]
 fn transparent_text_clears_inheritance_while_omitted_background_inherits() {
     let style = styles::TextStyleConfig {
@@ -696,6 +750,7 @@ fn transparent_text_clears_inheritance_while_omitted_background_inherits() {
             .contains("48;")
     );
 }
+
 #[test]
 fn transparent_window_emits_no_solid_background_colors() {
     let root = resolve(
@@ -712,6 +767,7 @@ fn transparent_window_emits_no_solid_background_colors() {
     assert!(strip(&output).contains("VALUE"));
     assert!(!output.contains("48;"), "{output:?}");
 }
+
 /// Track SGR backgrounds up to a text marker in the composed output.
 fn background_at(output: &str, marker: &str) -> Option<Vec<u16>> {
     let prefix = &output[..output.find(marker).unwrap()];
@@ -723,14 +779,17 @@ fn background_at(output: &str, marker: &str) -> Option<Vec<u16>> {
             i += 1;
             continue;
         }
+
         let start = i + 2;
         i = start;
         while i < bytes.len() && !(0x40..=0x7e).contains(&bytes[i]) {
             i += 1;
         }
+
         if i >= bytes.len() {
             break;
         }
+
         if bytes[i] == b'm' {
             let params = std::str::from_utf8(&bytes[start..i]).unwrap();
             let params: Vec<u16> = if params.is_empty() {
@@ -738,6 +797,7 @@ fn background_at(output: &str, marker: &str) -> Option<Vec<u16>> {
             } else {
                 params.split(';').map(|n| n.parse().unwrap()).collect()
             };
+
             let mut p = 0;
             while p < params.len() {
                 match params[p] {
@@ -761,6 +821,7 @@ fn background_at(output: &str, marker: &str) -> Option<Vec<u16>> {
     }
     bg
 }
+
 #[test]
 fn transparent_module_and_text_override_a_solid_parent() {
     for overrides in [
@@ -803,6 +864,7 @@ fn compact_default_is_short_editable_and_transparent() {
         toml::Value::try_from(cfg).unwrap()
     );
 }
+
 #[test]
 fn shorthand_handles_images_modules_component_options_and_sizes() {
     let cfg = Config::parse(
@@ -835,6 +897,7 @@ modules=[
     );
     cfg.editable_toml().unwrap();
 }
+
 #[test]
 fn compact_export_preserves_old_verbose_configs_and_advanced_examples() {
     let mut cfg = Config::default();
@@ -859,6 +922,7 @@ fn compact_export_preserves_old_verbose_configs_and_advanced_examples() {
         Config::parse(text).unwrap().editable_toml().unwrap();
     }
 }
+
 #[test]
 fn compact_export_preserves_nested_images_styles_and_empty_containers() {
     for text in [
@@ -872,6 +936,7 @@ fn compact_export_preserves_nested_images_styles_and_empty_containers() {
         Config::parse(text).unwrap().editable_toml().unwrap();
     }
 }
+
 #[test]
 fn shorthand_empty_arrays_clear_defaults_and_presets_expand() {
     let cfg = Config::parse("[layout.second]\nmodules=[]").unwrap();
@@ -881,6 +946,7 @@ fn shorthand_empty_arrays_clear_defaults_and_presets_expand() {
     let cfg = Config::parse("[layout.second]\nmodules=[{title='Empty',components=[]}]").unwrap();
     assert!(cfg.layout.second.children[0].children.is_empty());
 }
+
 #[test]
 fn partial_section_shortcuts_keep_default_modules() {
     let cfg = Config::parse("[layout.second]\nswatches=false").unwrap();
@@ -889,6 +955,7 @@ fn partial_section_shortcuts_keep_default_modules() {
     assert_eq!(cfg.layout.second.kind, Kind::Row);
     assert_eq!(cfg.layout.second.children.len(), 4);
 }
+
 #[test]
 fn ambiguous_or_invalid_shorthand_has_errors() {
     for text in [
@@ -927,6 +994,7 @@ fn section_alignment_shortcut_resolves_and_exports_compactly() {
     assert!(text.contains("align = \"center\""));
     assert!(Config::parse("[layout.second]\nalign='sideways'").is_err());
 }
+
 #[test]
 fn children_align_on_both_axes_in_rows_and_columns() {
     for direction in [Direction::Vertical, Direction::Horizontal] {
@@ -972,6 +1040,7 @@ fn children_align_on_both_axes_in_rows_and_columns() {
         }
     }
 }
+
 #[test]
 fn child_alignment_respects_padding_clipping_and_default_stretch() {
     let mut parent = Resolved::empty(ContainerStyleConfig {
@@ -999,6 +1068,7 @@ fn child_alignment_respects_padding_clipping_and_default_stretch() {
         Rect::new(2, 2, 6, 1)
     );
 }
+
 #[test]
 fn fill_children_use_main_axis_space_without_exceeding_alignment_bounds() {
     let mut parent = Resolved::empty(ContainerStyleConfig::plain());
@@ -1016,21 +1086,25 @@ fn configured_names(node: &layout::node::Node) -> BTreeSet<String> {
     if node.kind == Kind::Component && node.visible {
         names.insert(node.name.clone());
     }
+
     for child in node.header.iter().chain(&node.children).chain(&node.footer) {
         names.extend(configured_names(child));
     }
     names
 }
+
 fn resolved_names(node: &Resolved) -> BTreeSet<String> {
     let mut names = BTreeSet::new();
     if let Some(name) = &node.component_name {
         names.insert(name.clone());
     }
+
     for child in &node.children {
         names.extend(resolved_names(child));
     }
     names
 }
+
 fn full_snapshot() -> Snapshot {
     let mut snapshot = Snapshot::default();
     for d in components::DEFINITIONS {
@@ -1046,6 +1120,7 @@ fn full_snapshot() -> Snapshot {
         .insert("title".into(), Measurement::Text("fixture@machine".into()));
     snapshot
 }
+
 #[test]
 fn fastfetch_default_fixture_is_fully_covered_and_enabled_in_compact_config() {
     let upstream = include_str!("../tests/fixtures/fastfetch-2.71-defaults.txt")
@@ -1073,9 +1148,12 @@ fn fastfetch_default_fixture_is_fully_covered_and_enabled_in_compact_config() {
         "Hostname"
     );
 }
+
 #[test]
 fn fastfetch_aliases_normalize_and_presentation_entries_do_not_request_fake_metrics() {
-    let cfg=Config::parse("[layout.first]\ncomponents=['DE','WM','WMTheme','Theme','Icons','TerminalFont','LocalIp','PowerAdapter','Title','Separator','Break','Colors']\n[layout.second]\nmodules=[]").unwrap();
+    let cfg = Config::parse(
+        "[layout.first]\ncomponents=['DE','WM','WMTheme','Theme','Icons','TerminalFont','LocalIp','PowerAdapter','Title','Separator','Break','Colors']\n[layout.second]\nmodules=[]"
+    ).unwrap();
     let requested = Snapshot::requested([&cfg.layout.first, &cfg.layout.second]);
     assert_eq!(
         requested,
@@ -1096,13 +1174,16 @@ fn fastfetch_aliases_normalize_and_presentation_entries_do_not_request_fake_metr
     );
     cfg.editable_toml().unwrap();
 }
+
 #[test]
 fn presentation_entries_measure_unicode_title_and_ansi_palette() {
     let mut snapshot = Snapshot::default();
     snapshot
         .values
         .insert("title".into(), Measurement::Text("用户@host".into()));
-    let cfg=Config::parse("[layout.first]\nheader=['title','separator']\nmodules=[]\nfooter=['break','colors']\n[layout.second]\nmodules=[]").unwrap();
+    let cfg = Config::parse(
+        "[layout.first]\nheader=['title','separator']\nmodules=[]\nfooter=['break','colors']\n[layout.second]\nmodules=[]"
+    ).unwrap();
     let root = content::resolve(
         &cfg,
         &snapshot,
@@ -1123,12 +1204,14 @@ fn presentation_entries_measure_unicode_title_and_ansi_palette() {
     assert!(!plain.contains('█'));
     assert!(!plain.contains('\x1b'));
 }
+
 #[test]
 fn zero_swap_is_a_known_measurement_without_a_fabricated_percentage() {
     let value = Measurement::Memory { used: 0, total: 0 }.format();
     assert_eq!(value, "Not configured (0 B)");
     assert!(!value.contains('%'));
 }
+
 #[test]
 fn explicit_custom_sections_remain_fixed_and_keep_their_old_structure() {
     for text in [
@@ -1165,6 +1248,7 @@ fn explicit_custom_sections_remain_fixed_and_keep_their_old_structure() {
         );
     }
 }
+
 fn assert_placed_bounds(node: &layout::engine::Placed<'_>) {
     for child in &node.children {
         assert!(child.area.x >= node.area.x && child.area.y >= node.area.y);
@@ -1179,6 +1263,7 @@ fn assert_placed_bounds(node: &layout::engine::Placed<'_>) {
         assert_placed_bounds(child);
     }
 }
+
 #[test]
 fn responsive_defaults_adapt_without_changing_plain_output_or_config() {
     let cfg = Config::default();
@@ -1211,6 +1296,7 @@ fn responsive_defaults_adapt_without_changing_plain_output_or_config() {
             assert!(!names.contains("terminal_font"));
             assert_eq!(adapted.children.len(), 1);
         }
+
         if width == 160 {
             assert_eq!(names, original_names);
             assert_eq!(adapted.children.len(), 2);
@@ -1220,6 +1306,7 @@ fn responsive_defaults_adapt_without_changing_plain_output_or_config() {
     assert_eq!(before, toml::Value::try_from(&cfg).unwrap());
     assert!(plain.contains("terminal_font_VALUE") && plain.contains("local_ip_VALUE"));
 }
+
 #[test]
 fn responsive_layout_respects_both_splits_alignment_and_multiline_metrics() {
     let mut snapshot = full_snapshot();

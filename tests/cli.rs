@@ -3,6 +3,7 @@ use std::{
     process::{Command, Output},
     sync::atomic::{AtomicU64, Ordering},
 };
+
 static NEXT: AtomicU64 = AtomicU64::new(0);
 struct Fixture(PathBuf);
 impl Fixture {
@@ -15,11 +16,13 @@ impl Fixture {
         std::fs::create_dir_all(&path).unwrap();
         Self(path)
     }
+
     fn config(&self, text: &str) -> PathBuf {
         let path = self.0.join("config.toml");
         std::fs::write(&path, text).unwrap();
         path
     }
+
     fn run(&self, args: &[&str]) -> Output {
         Command::new(env!("CARGO_BIN_EXE_blink"))
             .env("XDG_CONFIG_HOME", &self.0)
@@ -28,11 +31,13 @@ impl Fixture {
             .unwrap()
     }
 }
+
 impl Drop for Fixture {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.0);
     }
 }
+
 #[test]
 fn redirected_output_is_plain_even_with_explicit_graphics() {
     let f = Fixture::new();
@@ -49,6 +54,7 @@ fn redirected_output_is_plain_even_with_explicit_graphics() {
         assert!(String::from_utf8_lossy(&result.stdout).contains("Hello"));
     }
 }
+
 #[test]
 fn first_launch_creates_compact_config_and_preserves_it() {
     let f = Fixture::new();
@@ -104,6 +110,7 @@ fn first_launch_creates_compact_config_and_preserves_it() {
     );
     assert_eq!(std::fs::read(path).unwrap(), original);
 }
+
 #[test]
 fn inspection_flags_do_not_create_config() {
     let f = Fixture::new();
@@ -123,6 +130,7 @@ fn inspection_flags_do_not_create_config() {
     }
     assert!(!f.0.join("blink/config.toml").exists());
 }
+
 #[test]
 fn print_config_applies_overrides_without_writing() {
     let f = Fixture::new();
@@ -146,6 +154,7 @@ fn print_config_applies_overrides_without_writing() {
     assert_eq!(cfg["layout"]["first"]["visible"].as_bool(), Some(false));
     assert_eq!(std::fs::read_to_string(path).unwrap(), "");
 }
+
 #[test]
 fn check_config_reports_bad_colors_and_assets_without_overwriting() {
     let f = Fixture::new();
@@ -162,6 +171,7 @@ fn check_config_reports_bad_colors_and_assets_without_overwriting() {
         assert_eq!(std::fs::read_to_string(path).unwrap(), text);
     }
 }
+
 #[test]
 fn optional_missing_images_do_not_break_normal_rendering() {
     let f = Fixture::new();
@@ -170,6 +180,7 @@ fn optional_missing_images_do_not_break_normal_rendering() {
     assert!(result.status.success());
     assert!(result.stderr.is_empty());
 }
+
 #[test]
 fn documented_examples_validate() {
     let f = Fixture::new();
@@ -190,6 +201,7 @@ fn documented_examples_validate() {
         );
     }
 }
+
 #[test]
 fn help_version_and_invalid_flags_have_expected_status() {
     let f = Fixture::new();
@@ -206,6 +218,7 @@ fn help_version_and_invalid_flags_have_expected_status() {
         .success()
     );
 }
+
 #[cfg(unix)]
 #[test]
 fn closed_output_pipe_exits_cleanly() {

@@ -4,6 +4,7 @@ use std::{
     io::{BufRead, BufReader},
     path::Path,
 };
+
 fn directories(path: &Path, required: Option<&str>) -> Option<u64> {
     let mut count = 0;
     for entry in std::fs::read_dir(path).ok()? {
@@ -16,6 +17,7 @@ fn directories(path: &Path, required: Option<&str>) -> Option<u64> {
     }
     Some(count)
 }
+
 pub fn dpkg(reader: impl BufRead) -> Option<u64> {
     let mut count = 0;
     let mut packages = 0;
@@ -26,20 +28,24 @@ pub fn dpkg(reader: impl BufRead) -> Option<u64> {
         if line.starts_with("Package: ") {
             packages += 1;
         }
+
         if line.trim() == "Status: install ok installed" {
             count += 1;
         }
     }
+
     if nonempty && packages == 0 {
         None
     } else {
         Some(count)
     }
 }
+
 fn rpm(path: &Path) -> Option<u64> {
     if !path.is_file() {
         return None;
     }
+
     let db = rusqlite::Connection::open_with_flags(
         path,
         rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
@@ -56,6 +62,7 @@ fn rpm(path: &Path) -> Option<u64> {
     })
     .ok()
 }
+
 fn flatpak(base: &Path) -> Option<u64> {
     std::fs::read_dir(base).ok()?;
     fn dirs(path: &Path) -> Option<Vec<std::path::PathBuf>> {
@@ -64,6 +71,7 @@ fn flatpak(base: &Path) -> Option<u64> {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Some(vec![]),
             Err(_) => return None,
         };
+
         let mut paths = vec![];
         for entry in entries {
             let entry = entry.ok()?;
@@ -75,6 +83,7 @@ fn flatpak(base: &Path) -> Option<u64> {
         }
         Some(paths)
     }
+
     let mut count = dirs(&base.join("app"))?
         .into_iter()
         .filter(|app| app.join("current").exists())
@@ -84,12 +93,14 @@ fn flatpak(base: &Path) -> Option<u64> {
         if name.ends_with(".Locale") || name.ends_with(".Debug") {
             continue;
         }
+
         for arch in dirs(&runtime)? {
             count += dirs(&arch)?.len() as u64;
         }
     }
     Some(count)
 }
+
 pub fn collect(s: &Sources) -> Option<Vec<(String, u64)>> {
     let mut counts = vec![];
     let pacman = s
@@ -108,11 +119,13 @@ pub fn collect(s: &Sources) -> Option<Vec<(String, u64)>> {
     if let Some(n) = directories(&db, Some("desc")) {
         counts.push(("pacman".into(), n));
     }
+
     if let Ok(file) = std::fs::File::open(s.path("var/lib/dpkg/status"))
         && let Some(n) = dpkg(BufReader::new(file))
     {
         counts.push(("dpkg".into(), n));
     }
+
     if let Some(n) = [
         "usr/lib/sysimage/rpm/rpmdb.sqlite",
         "var/lib/rpm/rpmdb.sqlite",
@@ -122,6 +135,7 @@ pub fn collect(s: &Sources) -> Option<Vec<(String, u64)>> {
     {
         counts.push(("rpm".into(), n));
     }
+
     let user_data = s
         .env("XDG_DATA_HOME")
         .map(std::path::PathBuf::from)
@@ -133,6 +147,7 @@ pub fn collect(s: &Sources) -> Option<Vec<(String, u64)>> {
     if !flatpak.is_empty() {
         counts.push(("flatpak".into(), flatpak.iter().sum()));
     }
+
     if let Ok(entries) = std::fs::read_dir(s.path("var/lib/snapd/sequence")) {
         let mut count = 0;
         let mut valid = true;
@@ -141,6 +156,7 @@ pub fn collect(s: &Sources) -> Option<Vec<(String, u64)>> {
                 valid = false;
                 break;
             };
+
             if entry.path().extension().is_some_and(|s| s == "json") {
                 let sequence = s
                     .read(&entry.path())
@@ -158,6 +174,7 @@ pub fn collect(s: &Sources) -> Option<Vec<(String, u64)>> {
                 }
             }
         }
+
         if valid {
             counts.push(("snap".into(), count));
         }

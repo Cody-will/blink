@@ -21,9 +21,11 @@ pub fn convert(value: &mut Value) -> anyhow::Result<()> {
     if !legacy {
         return Ok(());
     }
+
     if table.contains_key("styles") {
         bail!("Cannot mix legacy window/module styles with the new styles table");
     }
+
     let mut styles = Table::new();
     for (old, new) in [
         ("window", "window"),
@@ -42,11 +44,13 @@ pub fn convert(value: &mut Value) -> anyhow::Result<()> {
             if let Some(title) = t.remove("title") {
                 styles.insert("title".into(), title);
             }
+
             if let Some(gap) = t.remove("gap")
                 && gap.as_integer() != Some(0)
             {
                 bail!("Legacy global module gap must be moved to each module node's gap field");
             }
+
             if !t.is_empty() {
                 bail!(
                     "Unrecognized legacy {old} fields: {:?}",
@@ -55,18 +59,21 @@ pub fn convert(value: &mut Value) -> anyhow::Result<()> {
             }
         }
     }
+
     if let Some(Value::Table(mut component)) = table.remove("component") {
         for key in ["icon", "label", "content"] {
             if let Some(v) = component.remove(key) {
                 styles.insert(if key == "content" { "text" } else { key }.into(), v);
             }
         }
+
         if let Some(padding) = component.remove("padding") {
             styles.insert(
                 "component".into(),
                 Value::Table(Table::from_iter([("padding".into(), padding)])),
             );
         }
+
         if !component.is_empty() {
             bail!("Unrecognized legacy component fields");
         }
@@ -80,6 +87,7 @@ pub fn convert(value: &mut Value) -> anyhow::Result<()> {
         } else {
             None
         };
+
         if let Some((direction, first, second)) = direction {
             let mut split = layout
                 .remove(direction)
@@ -97,17 +105,20 @@ pub fn convert(value: &mut Value) -> anyhow::Result<()> {
                 if let Some(size) = section.remove("size") {
                     child.insert("size".into(), size);
                 }
+
                 if !section.is_empty() {
                     bail!("Unmapped legacy section fields");
                 }
                 layout.insert(new.into(), Value::Table(child));
             }
+
             if !split.is_empty() {
                 bail!("Unmapped legacy layout fields");
             }
             layout.insert("direction".into(), Value::String(direction.into()));
         }
     }
+
     fn nodes(v: &mut Value) -> anyhow::Result<()> {
         if let Value::Table(t) = v {
             if t.get("type").and_then(Value::as_str) == Some("module")
@@ -122,11 +133,13 @@ pub fn convert(value: &mut Value) -> anyhow::Result<()> {
                     }
                 }
             }
+
             if t.get("type").and_then(Value::as_str) == Some("icon") {
                 bail!(
                     "Legacy icon path nodes must become image nodes or component icon_path fields"
                 );
             }
+
             for (_, v) in t.iter_mut() {
                 nodes(v)?;
             }

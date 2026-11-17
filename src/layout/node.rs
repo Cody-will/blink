@@ -37,6 +37,7 @@ pub struct Node {
     pub label_style: toml::Table,
     pub icon_style: toml::Table,
 }
+
 impl Default for Node {
     fn default() -> Self {
         Self {
@@ -70,6 +71,7 @@ impl Default for Node {
         }
     }
 }
+
 #[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum Kind {
@@ -83,6 +85,7 @@ pub enum Kind {
     Component,
     Swatches,
 }
+
 #[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum Fit {
@@ -91,6 +94,7 @@ pub enum Fit {
     Cover,
     Stretch,
 }
+
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(default, deny_unknown_fields)]
 pub struct ImageOptions {
@@ -98,6 +102,7 @@ pub struct ImageOptions {
     pub align_h: Alignment,
     pub align_v: Alignment,
 }
+
 impl Default for ImageOptions {
     fn default() -> Self {
         Self {
